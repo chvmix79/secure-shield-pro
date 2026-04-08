@@ -43,6 +43,24 @@ Aplicación web integral para la gestión de seguridad cibernética, desarrollad
 
 El proyecto está configurado para desplegar automáticamente mediante GitHub Actions al hacer push a las ramas `main` o `master`.
 
+### Opción Recomendada: Vercel
+
+El proyecto está configurado para desplegarse en **Vercel** con los siguientes features:
+- ✅ Despliegue automático en cada push a `master`
+- ✅ Preview de Pull Requests
+- ✅ SSL gratuito automático
+- ✅ CDN global para máxima velocidad
+
+**Guía completa**: Ver [DEPLOY.md](./DEPLOY.md)
+
+### Quick Start para Despliegue
+
+1. Crea cuenta en [Vercel](https://vercel.com)
+2. Conecta tu repositorio de GitHub
+3. Agrega las variables de entorno en Vercel
+4. Configura los secrets de GitHub Actions
+5. ¡Listo! Cada push a `master` desplegará automáticamente
+
 ## Seguridad
 
 - Nunca subir el archivo `.env` al repositorio

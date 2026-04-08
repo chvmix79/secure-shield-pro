@@ -15,7 +15,7 @@ describe('authService', () => {
         user: { id: '123', email: 'test@test.com' },
         session: null
       };
-      vi.spyOn(supabase.auth, 'signUp').mockResolvedValue(mockData as any);
+      vi.spyOn(supabase.auth, 'signUp').mockResolvedValue({ data: mockData, error: null } as any);
 
       const result = await authService.signUp('test@test.com', 'password123');
 
@@ -41,7 +41,7 @@ describe('authService', () => {
         user: { id: '123', email: 'test@test.com' },
         session: { access_token: 'token123' }
       };
-      vi.spyOn(supabase.auth, 'signInWithPassword').mockResolvedValue(mockData as any);
+      vi.spyOn(supabase.auth, 'signInWithPassword').mockResolvedValue({ data: mockData, error: null } as any);
 
       const result = await authService.signIn('test@test.com', 'password123');
 
@@ -63,7 +63,7 @@ describe('authService', () => {
 
   describe('signOut', () => {
     it('debe cerrar sesión exitosamente', async () => {
-      vi.spyOn(supabase.auth, 'signOut').mockResolvedValue({ error: null });
+      vi.spyOn(supabase.auth, 'signOut').mockResolvedValue({ error: null } as any);
 
       await authService.signOut();
 

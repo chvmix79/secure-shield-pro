@@ -78,8 +78,10 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_ADMIN_EMAIL: ${{ secrets.VITE_ADMIN_EMAIL }}
 
-      - name: Deploy to Production
-        run: |
-          echo "Deploying to production..."
-          # Configurar pasos de despliegue específicos
-          # para tu infraestructura (Vercel, Netlify, etc.)
+      - name: Deploy to Vercel Production
+        uses: vercel/action-deploy@v1
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
