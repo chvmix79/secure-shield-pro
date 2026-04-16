@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { supabase } from "@/lib/supabase";
 import { generateSecurityReport } from "@/lib/reportService";
 import { scoreHistoryService, vulnerabilidadService, documentoService, microsoft365Service, phishingService } from "@/lib/services";
@@ -30,8 +31,8 @@ interface TrainingStats {
 
 import { DocumentoCumplimiento, Vulnerabilidad, ScoreHistory } from "@/lib/database.types";
 import { toast } from "sonner";
-import { suscripcionService } from "@/lib/suscripcion";
-import { Lock, History } from "lucide-react";
+import { suscripcionService, EstadoSuscripcion, PLANES } from "@/lib/suscripcion";
+import { Lock, History, Calendar } from "lucide-react";
 
 export default function Dashboard() {
   const { empresa, diagnostico, acciones, alertas, loading } = useEmpresa();
@@ -43,6 +44,7 @@ export default function Dashboard() {
   const [m365Audit, setM365Audit] = useState<any>(null);
   const [phishingStats, setPhishingStats] = useState<any[]>([]);
   const [plan, setPlan] = useState<string>('free');
+  const [estadoSuscripcion, setEstadoSuscripcion] = useState<EstadoSuscripcion | null>(null);
 
   useEffect(() => {
     async function loadDiagnosticos() {
@@ -50,9 +52,10 @@ export default function Dashboard() {
       const data = await diagnosticoService.getByEmpresa(empresa.id);
       setDiagnosticos(data || []);
       
-      // Get current plan
-      const currentPlan = await suscripcionService.getPlan(empresa.id);
-      setPlan(currentPlan);
+      // Get current plan and state
+      const e = await suscripcionService.getEstadoSuscripcion(empresa.id);
+      setEstadoSuscripcion(e);
+      setPlan(e.plan);
     }
     loadDiagnosticos();
   }, [empresa?.id]);
@@ -63,12 +66,12 @@ export default function Dashboard() {
       
       try {
         const [docsResult, docs, history, vulns, m365, phishing] = await Promise.all([
-          supabase.from('progreso_capacitacion').select('modulo_id, completado').eq('empresa_id', empresa.id),
-          documentoService.getByEmpresa(empresa.id),
-          scoreHistoryService.getByEmpresa(empresa.id),
-          vulnerabilidadService.getByEmpresa(empresa.id),
-          microsoft365Service.getAuditStatus(empresa.id),
-          phishingService.getCampañas(empresa.id)
+          supabase.from('progreso_capacitacion').select('modulo_id, completado, usuarios!inner(empresa_id)').eq('usuarios.empresa_id', empresa.id).catch(() => ({ data: [] })),
+          documentoService.getByEmpresa(empresa.id).catch(() => []),
+          scoreHistoryService.getByEmpresa(empresa.id).catch(() => []),
+          vulnerabilidadService.getByEmpresa(empresa.id).catch(() => []),
+          microsoft365Service.getAuditStatus(empresa.id).catch(() => null),
+          phishingService.getCampañas(empresa.id).catch(() => [])
         ]);
         
         if (docsResult.data) {
@@ -102,22 +105,22 @@ export default function Dashboard() {
   const completedActions = acciones.filter((a) => a.estado === "completada");
   const inProgressActions = acciones.filter((a) => a.estado === "en_progreso");
   
-  // CÁLCULO DE SCORE DINÁMICO
+  // CÁLCULO DE SCORE DE SEGURIDAD
+  // El score base es el resultado del último diagnóstico (lo que el usuario espera ver)
   const baseScore = diagnostico?.score ?? 0;
+  
+  // El progreso de implementación mide cuánto se ha avanzado en el plan de acción, capacitación y documentos
   const totalAcciones = acciones.length || 1;
-  const actionProgress = Math.round((completedActions.length / totalAcciones) * 20);
-  const trainingProgress = Math.round((trainingStats.completados / trainingStats.total) * 10);
-  const docProgress = Math.round((docStats.actualizados / docStats.total) * 10);
+  const implementationProgress = Math.round(
+    ((completedActions.length / totalAcciones) * 40) + // 40% peso acciones
+    ((trainingStats.completados / (trainingStats.total || 1)) * 30) + // 30% peso capacitación
+    ((docStats.actualizados / (docStats.total || 1)) * 30) // 30% peso documentos
+  );
+
+  const docProgress = Math.round((docStats.actualizados / (docStats.total || 1)) * 100);
   
-  // Score dinámico: 50% diagnóstico base + 20% acciones + 10% capacitación + 10% docs
-  const dynamicScore = Math.min(100, Math.round(
-    (baseScore * 0.5) + 
-    actionProgress + 
-    trainingProgress + 
-    docProgress
-  ));
-  
-  const score = dynamicScore;
+  // El score final mostrado es el del diagnóstico actual
+  const score = baseScore;
   const securityInfo = calculateSecurityLevel(score);
   
   const riesgosDetectados = diagnostico ? Object.entries(diagnostico.respuestas || {})
@@ -138,7 +141,7 @@ export default function Dashboard() {
     {
       label: "Acciones Completadas",
       value: completedActions.length.toString(),
-      sub: `de ${acciones.length} totales (${actionProgress}%)`,
+      sub: `de ${acciones.length} totales`,
       icon: CheckCircle2,
       color: "text-success",
       bg: "bg-success/10 border-success/20",
@@ -222,30 +225,79 @@ export default function Dashboard() {
         {/* Score + Stats */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           {/* Score circle */}
-          <div className="lg:col-span-1 card-glass rounded-xl p-6 flex flex-col items-center justify-center gap-3">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Score Global</p>
+          <div className="lg:col-span-1 card-glass rounded-xl p-6 flex flex-col items-center justify-center gap-3 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-2">
+              <TooltipProvider>
+                <Badge variant="outline" className="text-[9px] cursor-help">Score Diagnóstico</Badge>
+              </TooltipProvider>
+            </div>
             <SecurityScoreWidget score={score} />
+            <div className="w-full mt-2">
+              <div className="flex justify-between text-[10px] mb-1">
+                <span className="text-muted-foreground uppercase font-bold">Implementación</span>
+                <span className="text-primary font-bold">{implementationProgress}%</span>
+              </div>
+              <Progress value={implementationProgress} className="h-1" />
+            </div>
             <Link 
               to={diagnostico ? `/diagnostico?id=${diagnostico.id}` : "/diagnostico"} 
               className="text-xs text-primary hover:underline flex items-center gap-1 mt-1"
             >
-              Ver diagnóstico <ArrowRight size={12} />
+              Ver diagnóstico completo <ArrowRight size={12} />
             </Link>
           </div>
 
-          {/* Stats */}
-          <div className="lg:col-span-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-            {stats.map(({ label, value, sub, icon: Icon, color, bg, to }) => (
-              <Link key={label} to={to} className="card-glass rounded-xl p-4 hover:border-primary/30 transition-all group">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 border ${bg}`}>
-                  <Icon size={20} className={color} />
+            {/* Right side container - takes 4 columns on desktop */}
+            <div className="lg:col-span-4 flex flex-col gap-4">
+              {/* Subscription Status Card */}
+              <div className="card-glass overflow-hidden border-primary/20 bg-primary/5 transition-all hover:shadow-xl group rounded-xl p-5 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="bg-primary/20 p-2.5 rounded-xl text-primary group-hover:scale-110 transition-transform">
+                    <ShieldCheck size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-foreground">Plan {PLANES[plan as keyof typeof PLANES]?.nombre || plan}</h3>
+                      <Badge variant="outline" className={cn(
+                        "text-[10px] uppercase font-black px-2 py-0",
+                        estadoSuscripcion?.diasRestantes !== undefined && estadoSuscripcion.diasRestantes <= 0 ? "border-danger text-danger bg-danger/5" : 
+                        estadoSuscripcion?.diasRestantes !== undefined && estadoSuscripcion.diasRestantes <= 5 ? "border-warning text-warning bg-warning/5" : "border-primary/30 text-primary bg-primary/5"
+                      )}>
+                        {estadoSuscripcion?.diasRestantes !== undefined && estadoSuscripcion.diasRestantes <= 0 ? "Vencido" : "Activo"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <Calendar size={12} /> 
+                      Vence: {estadoSuscripcion?.fecha_fin ? new Date(estadoSuscripcion.fecha_fin).toLocaleDateString() : 'N/A'} 
+                      {estadoSuscripcion?.diasRestantes !== undefined && (
+                        <span className="font-bold ml-1">
+                          ({estadoSuscripcion.diasRestantes <= 0 ? "Periodo de gracia" : `${estadoSuscripcion.diasRestantes} días restantes`})
+                        </span>
+                      )}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-2xl font-bold text-foreground">{value}</p>
-                <p className="text-xs font-medium text-foreground mt-0.5">{label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
-              </Link>
-            ))}
-          </div>
+                <Link to="/planes">
+                  <Button size="sm" className="font-black uppercase tracking-tighter shadow-lg shadow-primary/20">
+                    Gestionar Plan
+                  </Button>
+                </Link>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {stats.map(({ label, value, sub, icon: Icon, color, bg, to }) => (
+                  <Link key={label} to={to} className="card-glass rounded-xl p-4 hover:border-primary/30 transition-all group">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 border ${bg}`}>
+                      <Icon size={20} className={color} />
+                    </div>
+                    <p className="text-2xl font-bold text-foreground">{value}</p>
+                    <p className="text-xs font-medium text-foreground mt-0.5">{label}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
+                  </Link>
+                ))}
+              </div>
+            </div>
         </div>
 
         {/* Charts section */}

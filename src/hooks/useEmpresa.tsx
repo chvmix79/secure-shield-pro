@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { empresaService, diagnosticoService, accionService, evidenciaService, alertaService } from '@/lib/services';
 import type { Empresa, Diagnostico, Accion, Evidencia, Alerta } from '@/lib/database.types';
+import { esAdminGlobal } from '@/lib/admin-utils';
+import { supabase } from '@/lib/supabase';
 
 interface EmpresaContextType {
   empresa: Empresa | null;
@@ -34,9 +36,60 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       
       const empresaId = localStorage.getItem("empresa_id");
-      const isGlobalAdmin = localStorage.getItem("is_admin") === "true";
+      const { data: authData } = await supabase.auth.getSession();
+      const userEmail = authData?.session?.user?.email?.toLowerCase() || localStorage.getItem("user_email")?.toLowerCase() || "";
       
-      if (!empresaId && !isGlobalAdmin) {
+      // Administrador global basado en esAdminGlobal (central) o roles app_metadata
+      const isGlobalAdmin = esAdminGlobal(userEmail);
+      const sessionIsAdmin = authData?.session?.user?.app_metadata?.isAdmin === true;
+      const isActuallyAdmin = isGlobalAdmin || sessionIsAdmin;
+      
+      setIsAdmin(isActuallyAdmin);
+
+      // Caso: Admin sin empresa seleccionada
+      if (isActuallyAdmin && !empresaId) {
+        setEmpresa(null);
+        setDiagnostico(null);
+        setAcciones([]);
+        setEvidencias([]);
+        setAlertas([]);
+        setLoading(false);
+        return;
+      }
+
+      // Caso: No admin y sin empresaID
+      if (!empresaId) {
+        setEmpresa(null);
+        setDiagnostico(null);
+        setAcciones([]);
+        setEvidencias([]);
+        setAlertas([]);
+        setLoading(false);
+        return;
+      }
+
+      let emp = await empresaService.getById(empresaId).catch(() => null);
+      
+      // Fallback robusto: si falla carga directa (por ej. por latencia o RLS) y es admin, cargamos desde la vista
+      if (!emp && isActuallyAdmin) {
+        const { data: v_emp } = await supabase.from('v_empresas_stats').select('*').eq('id', empresaId).single();
+        if (v_emp) {
+          emp = {
+            id: v_emp.id,
+            nombre: v_emp.nombre,
+            email: v_emp.email,
+            sector: v_emp.sector,
+            plan: v_emp.plan || 'free',
+            user_id: 'admin-view',
+            cuenta_bloqueada: false,
+            created_at: v_emp.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          } as any;
+        }
+      }
+      
+      if (!emp) {
+        localStorage.removeItem("empresa_id");
         setEmpresa(null);
         setDiagnostico(null);
         setAcciones([]);
@@ -46,58 +99,39 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
         return;
       }
       
-      if (isGlobalAdmin && !empresaId) {
-        setIsAdmin(true);
-        setLoading(false);
-        return;
-      }
-      
-      const emp = await empresaService.getById(empresaId);
-      
-      if (!emp) {
-        localStorage.removeItem("empresa_id");
-        setEmpresa(null);
-        setLoading(false);
-        return;
-      }
-      
       setEmpresa(emp);
       
-      const diagnosticos = await diagnosticoService.getByEmpresa(emp.id);
-      if (diagnosticos && diagnosticos.length > 0) {
-        setDiagnostico(diagnosticos[0]);
+      // Carga paralela de datos de la empresa
+      const [diags, accs, alts] = await Promise.all([
+        diagnosticoService.getByEmpresa(emp.id).catch(() => []),
+        accionService.getByEmpresa(emp.id).catch(() => []),
+        alertaService.getByEmpresa(emp.id).catch(() => [])
+      ]);
+
+      if (diags && diags.length > 0) {
+        setDiagnostico(diags[0]);
       } else {
         setDiagnostico(null);
       }
       
-      const accs = await accionService.getByEmpresa(emp.id);
       setAcciones(accs || []);
-      
-      const evids: Evidencia[] = [];
-      for (const acc of accs || []) {
-        const e = await evidenciaService.getByAccion(acc.id);
-        if (e) evids.push(...e);
-      }
-      setEvidencias(evids);
-      
-      const alts = await alertaService.getByEmpresa(emp.id);
       setAlertas(alts || []);
-      
-      // Verificar admin global usando variable de entorno (nunca hardcodeada)
-      const adminEmail = import.meta.env.VITE_ADMIN_EMAIL?.toLowerCase() || '';
-      if (isGlobalAdmin) {
-        setIsAdmin(true);
-        localStorage.setItem("is_admin", "true");
-      } else if (adminEmail && emp && emp.email.toLowerCase() === adminEmail) {
-        setIsAdmin(true);
-        localStorage.setItem("is_admin", "true");
+
+      // Carga de evidencias
+      if (accs && accs.length > 0) {
+        const evids: Evidencia[] = [];
+        const targetAccs = accs.slice(0, 20); 
+        for (const acc of targetAccs) {
+          const e = await evidenciaService.getByAccion(acc.id).catch(() => []);
+          if (e) evids.push(...e);
+        }
+        setEvidencias(evids);
       } else {
-        // Sin detección por patrón de email — solo el admin definido en env tiene acceso
-        setIsAdmin(false);
-        localStorage.setItem("is_admin", "false");
+        setEvidencias([]);
       }
+
     } catch (error) {
-      console.error('Error loading empresa data:', error);
+      console.error('CRITICAL: Error loading dashboard data:', error);
     } finally {
       setLoading(false);
     }

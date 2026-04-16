@@ -27,7 +27,8 @@ const config: Record<RiskLevel, { label: string; classes: string }> = {
 };
 
 export function RiskBadge({ level, className, size = "sm" }: RiskBadgeProps) {
-  const { label, classes } = config[level];
+  const safeConfig = config[level] || config['bajo'];
+  const { label, classes } = safeConfig;
   return (
     <span
       className={cn(

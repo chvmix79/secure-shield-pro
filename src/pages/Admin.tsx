@@ -5,7 +5,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Building2, Users, Shield, TrendingUp, ArrowRight, Search, Filter, CheckCircle2, AlertTriangle, Clock, Eye, Pencil, Trash2, X, Plus, ExternalLink, MessageSquare, DollarSign, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,6 +16,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { suscripcionService, PLANES } from "@/lib/suscripcion";
 import { pagoService, SolicitudPago } from "@/lib/pago";
 import { toast } from "sonner";
+import { esAdminGlobal } from "@/lib/admin-utils";
+import { useEmpresa } from "@/hooks/useEmpresa";
 
 interface EmpresaStats {
   id: string;
@@ -27,6 +29,7 @@ interface EmpresaStats {
   score_promedio: number;
   acciones_pendientes: number;
   acciones_completadas: number;
+  plan: string;
 }
 
 interface Tool {
@@ -64,6 +67,7 @@ const sectores: Record<string, string> = {
 
 export default function Admin() {
   const navigate = useNavigate();
+  const { refresh } = useEmpresa();
   const [empresas, setEmpresas] = useState<EmpresaStats[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -77,10 +81,14 @@ export default function Admin() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [toolDialogOpen, setToolDialogOpen] = useState(false);
   
+  const [planDialogOpen, setPlanDialogOpen] = useState(false);
+  
   const [selectedEmpresa, setSelectedEmpresa] = useState<EmpresaStats | null>(null);
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
+  const [selectedEmpresaForPlan, setSelectedEmpresaForPlan] = useState<EmpresaStats | null>(null);
   
   const [editForm, setEditForm] = useState({ nombre: "", sector: "", email: "" });
+  const [planForm, setPlanForm] = useState({ plan: "free", duration: "30" });
   const [toolForm, setToolForm] = useState<Partial<Tool>>({
     nombre: "",
     descripcion: "",
@@ -93,7 +101,8 @@ export default function Admin() {
     commission_percent: 0
   });
 
-  const isAdmin = localStorage.getItem("is_admin") === "true";
+  const { isAdmin: contextIsAdmin } = useEmpresa();
+  const isAdmin = contextIsAdmin || esAdminGlobal(localStorage.getItem("user_email"));
 
   useEffect(() => {
     if (isAdmin) {
@@ -102,9 +111,19 @@ export default function Admin() {
   }, []);
 
   const loadAll = async () => {
-    setLoading(true);
-    await Promise.all([loadEmpresas(), loadTools(), loadLeads(), loadSolicitudes()]);
-    setLoading(false);
+    try {
+      setLoading(true);
+      await Promise.all([
+        loadEmpresas().catch(e => console.error("Error loading empresas:", e)), 
+        loadTools().catch(e => console.error("Error loading tools:", e)), 
+        loadLeads().catch(e => console.error("Error loading leads:", e)), 
+        loadSolicitudes().catch(e => console.error("Error loading requests:", e))
+      ]);
+    } catch (err) {
+      console.error("Error in loadAll:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   async function loadEmpresas() {
@@ -120,21 +139,38 @@ export default function Admin() {
         score_promedio: Math.round(stat.score_promedio || 0),
         acciones_pendientes: stat.acciones_pendientes || 0,
         acciones_completadas: stat.acciones_completadas || 0,
+        plan: stat.plan || 'free'
       })));
     }
   }
 
   async function loadTools() {
-    const { data } = await supabase.from("herramientas").select("*").order("nombre");
-    if (data) setTools(data);
+    try {
+      const { data, error } = await supabase.from("herramientas").select("*").order("nombre");
+      if (error) {
+        console.error("Error loading tools:", error);
+        return;
+      }
+      if (data) setTools(data);
+    } catch (e) {
+      console.error("Exception loading tools:", e);
+    }
   }
 
   async function loadLeads() {
-    const { data } = await supabase
-      .from("leads_marketplace")
-      .select("*, empresa:empresas(nombre)")
-      .order("created_at", { ascending: false });
-    if (data) setLeads(data as unknown as Lead[]);
+    try {
+      const { data, error } = await supabase
+        .from("leads_marketplace")
+        .select("*, empresa:empresas(nombre)")
+        .order("created_at", { ascending: false });
+      if (error) {
+        console.error("Error loading leads:", error);
+        return;
+      }
+      if (data) setLeads(data as unknown as Lead[]);
+    } catch (e) {
+      console.error("Exception loading leads:", e);
+    }
   }
 
   async function loadSolicitudes() {
@@ -207,6 +243,24 @@ export default function Admin() {
     }
   };
 
+  const handleSaveEmpresa = async () => {
+    try {
+      if (selectedEmpresa) {
+        const { error } = await supabase
+          .from("empresas")
+          .update(editForm)
+          .eq("id", selectedEmpresa.id);
+        if (error) throw error;
+        toast.success("Empresa actualizada correctamente");
+        setEditDialogOpen(false);
+        loadEmpresas();
+        refresh(); // Refrescamos el contexto por si es la empresa actual
+      }
+    } catch (error) {
+      toast.error("Error al actualizar la empresa");
+    }
+  };
+
   const handleDeleteEmpresa = async (id: string, nombre: string) => {
     if (!isAdmin) return;
     if (!confirm(`¿Estás SEGURO de eliminar por completo la empresa "${nombre}" y todos sus datos? Esta acción crítica no se puede deshacer.`)) return;
@@ -219,6 +273,34 @@ export default function Admin() {
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || "Error al eliminar la empresa. Asegúrate de eliminar primero todas las referencias (usuarios, diagnósticos) o configurar el borrado en cascada en la base de datos.");
+    }
+  };
+
+  const handleUpdatePlan = async () => {
+    if (!selectedEmpresaForPlan) return;
+    const hoy = new Date();
+    const diasContratados = parseInt(planForm.duration);
+    const fechaFinEfectiva = new Date();
+    // El sistema ahora suma 2 días de gracia automáticamente a la fecha de fin
+    fechaFinEfectiva.setDate(fechaFinEfectiva.getDate() + diasContratados + 2);
+
+    const fmt = (d: Date) => d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    try {
+      await suscripcionService.upgradePlan(
+        selectedEmpresaForPlan.id,
+        planForm.plan as any,
+        dias
+      );
+      toast.success(
+        `✅ Plan ${PLANES[planForm.plan as keyof typeof PLANES]?.nombre} activado para ${selectedEmpresaForPlan.nombre}. Acceso total hasta el ${fmt(fechaFinEfectiva)} (Incluye ${diasContratados} días contratados + 2 de gracia).`,
+        { duration: 6000 }
+      );
+      refresh(); // Sincroniza el contexto global inmediatamente
+      setPlanDialogOpen(false);
+      loadEmpresas();
+    } catch (error) {
+      toast.error("Error al actualizar el plan");
     }
   };
 
@@ -313,10 +395,13 @@ export default function Admin() {
                         <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
                           <Building2 size={24} />
                         </div>
-                        <div>
-                          <h3 className="font-bold text-foreground leading-tight">{emp.nombre}</h3>
-                          <p className="text-xs text-muted-foreground">{emp.email} • {sectores[emp.sector] || emp.sector}</p>
-                        </div>
+                          <div className="flex flex-col items-center">
+                            <h3 className="font-bold text-foreground leading-tight">{emp.nombre}</h3>
+                            <p className="text-xs text-muted-foreground">{emp.email} • {sectores[emp.sector] || emp.sector}</p>
+                            <Badge variant="outline" className="mt-1 bg-primary/5 text-primary border-primary/20 capitalize font-bold">
+                              Plan {PLANES[emp.plan as keyof typeof PLANES]?.nombre || emp.plan}
+                            </Badge>
+                          </div>
                       </div>
                       
                       <div className="flex items-center gap-8">
@@ -330,10 +415,36 @@ export default function Admin() {
                           <Button variant="outline" size="sm" onClick={() => handleIrDashboard(emp.id)} className="h-8">
                             <Eye size={14} className="mr-1" /> Ver Tablero
                           </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => {
+                              setSelectedEmpresaForPlan(emp);
+                              setPlanForm({ plan: emp.plan || 'free', duration: "30" });
+                              setPlanDialogOpen(true);
+                            }} 
+                            className="h-8 border-primary/30 text-primary hover:bg-primary/5"
+                          >
+                            <Shield size={14} className="mr-1" /> Gestionar Plan
+                          </Button>
                           {isAdmin && (
-                            <Button variant="destructive" size="icon" onClick={() => handleDeleteEmpresa(emp.id, emp.nombre)} className="h-8 w-8 bg-danger/20 text-danger hover:bg-danger/90 hover:text-white border-danger/30">
-                              <Trash2 size={14} />
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button 
+                                variant="outline" 
+                                size="icon" 
+                                className="h-8 w-8 text-primary border-primary/30"
+                                onClick={() => {
+                                  setSelectedEmpresa(emp);
+                                  setEditForm({ nombre: emp.nombre, sector: emp.sector, email: emp.email });
+                                  setEditDialogOpen(true);
+                                }}
+                              >
+                                <Pencil size={14} />
+                              </Button>
+                              <Button variant="destructive" size="icon" onClick={() => handleDeleteEmpresa(emp.id, emp.nombre)} className="h-8 w-8 bg-danger/20 text-danger hover:bg-danger/90 hover:text-white border-danger/30">
+                                <Trash2 size={14} />
+                              </Button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -587,6 +698,114 @@ export default function Admin() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Plan Management Dialog */}
+        <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Gestionar Plan para {selectedEmpresaForPlan?.nombre}</DialogTitle>
+              <DialogDescription>
+                Cambia el plan de suscripción y la duración del acceso.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Seleccionar Plan</Label>
+                <Select value={planForm.plan} onValueChange={v => setPlanForm({...planForm, plan: v})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un plan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="free">Prueba Gratis (Limitado)</SelectItem>
+                    <SelectItem value="basic">Básico</SelectItem>
+                    <SelectItem value="pro">Profesional (Full)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Duración (días)</Label>
+                <Select value={planForm.duration} onValueChange={v => setPlanForm({...planForm, duration: v})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">7 días (Express)</SelectItem>
+                    <SelectItem value="30">30 días (Mes)</SelectItem>
+                    <SelectItem value="90">90 días (Trimestre)</SelectItem>
+                    <SelectItem value="365">365 días (Año)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Vista previa de fechas */}
+              {planForm.plan !== 'free' && (() => {
+                const hoy = new Date();
+                const diasContratados = parseInt(planForm.duration);
+                const fin = new Date();
+                fin.setDate(fin.getDate() + diasContratados + 2);
+                const fmt = (d: Date) => d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+                return (
+                  <div className="bg-muted/60 rounded-lg p-3 space-y-1.5 border border-border">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Vista previa de acceso</p>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Inicio:</span>
+                      <span className="font-bold text-foreground">{fmt(hoy)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs border-t border-border pt-1.5 mt-1">
+                      <span className="text-muted-foreground font-bold">Bloqueo Definitivo:</span>
+                      <span className="font-bold text-danger">{fmt(fin)}</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-2 italic">
+                      * El acceso incluye {diasContratados} días de suscripción + 2 días de gracia.
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPlanDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={handleUpdatePlan} className="bg-success hover:bg-success/90">
+                <CheckCircle2 size={14} className="mr-2" /> Actualizar Plan
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Empresa Edit Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Editar Empresa: {selectedEmpresa?.nombre}</DialogTitle>
+              <DialogDescription>
+                Actualiza la información básica de la organización.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Nombre de la Empresa</Label>
+                <Input value={editForm.nombre} onChange={e => setEditForm({...editForm, nombre: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Sector</Label>
+                <Select value={editForm.sector} onValueChange={v => setEditForm({...editForm, sector: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(sectores).map(([val, label]) => (
+                      <SelectItem key={val} value={val}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Email de Contacto</Label>
+                <Input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={handleSaveEmpresa}>Guardar Cambios</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Tool CRUD Dialog */}
         <Dialog open={toolDialogOpen} onOpenChange={setToolDialogOpen}>

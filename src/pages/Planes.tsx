@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 export default function Planes() {
   const navigate = useNavigate();
   const { empresa, refresh } = useEmpresa();
-  const [planActual, setPlanActual] = useState<PlanType>('free');
+  const [planActual, setPlanActual] = useState<PlanType>(empresa?.plan || 'free');
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState(false);
   const [showPayment, setShowPayment] = useState(false);

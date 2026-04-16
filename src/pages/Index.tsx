@@ -124,7 +124,7 @@ export default function Index() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                 </span>
-                Estándar de Seguridad 2024
+                Estándar de Seguridad 2026
               </div>
               
               <h1 className="text-5xl lg:text-7xl font-black text-white leading-[1.1] tracking-tight">
@@ -376,7 +376,7 @@ export default function Index() {
         <div className="max-w-7xl mx-auto grid md:grid-cols-4 gap-12 lg:gap-24">
           <div className="col-span-1 md:col-span-2 space-y-6">
             <div className="flex items-center gap-3">
-              <Shield className="text-primary" size={32} />
+              <img src={logoCHV} alt="Logo CHV" className="w-10 h-10 drop-shadow-md" />
               <div className="flex flex-col">
                 <span className="font-black text-2xl tracking-tight text-white leading-none">CHV</span>
                 <span className="text-xs uppercase tracking-[0.2em] text-primary font-bold">CIBERDEFENSA</span>
@@ -417,7 +417,7 @@ export default function Index() {
         
         <div className="max-w-7xl mx-auto mt-20 pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-slate-600 text-sm">
-            © 2024 CHV Ciberdefensa. Todos los derechos reservados.
+            © 2026 CHV Ciberdefensa. Todos los derechos reservados.
           </p>
           <div className="flex items-center gap-2 text-slate-600 text-sm">
             <Lock size={14} />

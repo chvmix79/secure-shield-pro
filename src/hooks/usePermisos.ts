@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { esAdminGlobal } from '@/lib/admin-utils';
 import type { Usuario } from '@/lib/database.types';
 
 export type Modulo = 
@@ -37,22 +38,39 @@ export function useUsuarioActual() {
 
   useEffect(() => {
     async function cargarUsuario() {
-      const email = localStorage.getItem('user_email');
-      if (!email) {
+      try {
+        const email = localStorage.getItem('user_email');
+        if (!email) {
+          setLoading(false);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('usuarios')
+          .select('*')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Error loading user profile:", error);
+        } else if (data) {
+          setUsuario(data);
+        } else if (esAdminGlobal(email)) {
+          // Si es admin global pero no tiene perfil de usuario (empleado),
+          // creamos un objeto de usuario virtual básico para evitar fallos aguas abajo.
+          setUsuario({
+            id: 'admin',
+            email: email,
+            nombre: 'Administrador Global',
+            rol: 'super_admin',
+            created_at: new Date().toISOString()
+          } as any);
+        }
+      } catch (err) {
+        console.error("Fatal error in loading user:", err);
+      } finally {
         setLoading(false);
-        return;
       }
-
-      const { data } = await supabase
-        .from('usuarios')
-        .select('*')
-        .eq('email', email)
-        .single();
-
-      if (data) {
-        setUsuario(data);
-      }
-      setLoading(false);
     }
 
     cargarUsuario();
@@ -60,13 +78,16 @@ export function useUsuarioActual() {
 
   const tieneAcceso = (modulo: Modulo): boolean => {
     if (!usuario) return false;
-    if (usuario.rol === 'admin') return true;
+    // El tablero/diagnóstico siempre debe ser accesible para evitar bucles de redirección
+    if (modulo === 'diagnostico') return true;
+    // Permitir acceso total a roles administrativos
+    if (usuario.rol === 'admin' || usuario.rol === 'super_admin') return true;
     return (usuario.modulos || []).includes(modulo);
   };
 
   const getModulosHabilitados = (): Modulo[] => {
     if (!usuario) return [];
-    if (usuario.rol === 'admin') return TODOS_MODULOS;
+    if (usuario.rol === 'admin' || usuario.rol === 'super_admin') return TODOS_MODULOS;
     return (usuario.modulos || []) as Modulo[];
   };
 

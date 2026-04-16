@@ -22,7 +22,7 @@ export const informacionPago = {
   cuenta: "Cuenta de Ahorros 123-456-789",
   nit: "900.123.456-7",
   concepto: "Pago CHV Ciberdefensa - [NOMBRE EMPRESA]",
-  contacto: "pagos@chvciberdefensa.com",
+  contacto: "chv.79@hotmail.com | +573008820783",
 };
 
 export const pagoService = {

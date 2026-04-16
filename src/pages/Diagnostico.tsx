@@ -40,7 +40,7 @@ export default function Diagnostico() {
     }
   }, [searchParams]);
 
-  const questions = useMemo(() => getQuestionsWithNormativas(), []);
+  const questions = useMemo(() => getQuestionsWithNormativas(empresa?.sector), [empresa?.sector]);
   
   const totalQ = questions.length;
   const progress = ((currentQ + 1) / totalQ) * 100;

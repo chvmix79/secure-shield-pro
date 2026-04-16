@@ -40,7 +40,7 @@ CREATE POLICY "usuarios_delete" ON usuarios FOR DELETE USING (is_global_admin())
 
 -- EMPRESAS: propia o admin
 CREATE POLICY "empresas_select" ON empresas FOR SELECT USING (user_id = auth.uid() OR is_global_admin());
-CREATE POLICY "empresas_insert" ON empresas FOR INSERT WITH CHECK (true);
+CREATE POLICY "empresas_insert" ON empresas FOR INSERT WITH CHECK (user_id = auth.uid() OR is_global_admin());
 CREATE POLICY "empresas_update" ON empresas FOR UPDATE USING (user_id = auth.uid() OR is_global_admin());
 
 -- DIAGNOSTICOS: propia empresa o admin

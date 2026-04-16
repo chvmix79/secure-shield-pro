@@ -56,6 +56,9 @@ export default function Empresa() {
         empleados: empresa.empleados,
         nivel_tech: empresa.nivel_tech as "bajo" | "medio" | "alto",
         email: empresa.email,
+        plan: "pro",
+        fecha_inicio: new Date().toISOString(),
+        fecha_fin: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 año
       });
       
       localStorage.setItem("empresa_id", newEmpresa.id);

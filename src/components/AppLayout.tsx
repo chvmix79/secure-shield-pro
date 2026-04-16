@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation, Navigate } from "react-router-dom";
 import logoCHV from "@/assets/Logo_CHV.png";
+import { supabase } from "@/lib/supabase";
 import {
   LayoutDashboard,
   ClipboardCheck,
@@ -34,8 +35,9 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useEmpresa } from "@/hooks/useEmpresa";
 import { useUsuarioActual, MODULOS_DISPONIBLES, Modulo } from "@/hooks/usePermisos";
-import { suscripcionService, PLANES } from "@/lib/suscripcion";
+import { suscripcionService, PLANES, EstadoSuscripcion } from "@/lib/suscripcion";
 import { RealtimeNotifications } from "./RealtimeNotifications";
+import { esAdminGlobal } from "@/lib/admin-utils";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -75,26 +77,59 @@ const RUTA_MODULO: Record<string, Modulo> = {
 export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { empresa, acciones, alertas } = useEmpresa();
+  const { empresa, acciones, alertas, isAdmin: contextIsAdmin } = useEmpresa();
   const { usuario, tieneAcceso, loading: loadingUsuario } = useUsuarioActual();
-    const ownerEmails = [
-      "chvmix79@gmail.com", 
-      "chv.79@hotmail.com", 
-      import.meta.env.VITE_ADMIN_EMAIL
-    ].filter(Boolean).map(e => e?.toLowerCase());
-    const authEmail = localStorage.getItem("user_email")?.toLowerCase() || "";
-    const isAdmin = authEmail && ownerEmails.includes(authEmail) || localStorage.getItem("is_admin") === "true";
-  const [plan, setPlan] = useState<string>('free');
+  const authEmail = localStorage.getItem("user_email")?.toLowerCase() || "";
+  const isAdmin = esAdminGlobal(authEmail) || contextIsAdmin;
+  const [plan, setPlan] = useState<string>(empresa?.plan || 'free');
+  const [estadoSuscripcion, setEstadoSuscripcion] = useState<EstadoSuscripcion | null>(null);
+  const [loadingSuscripcion, setLoadingSuscripcion] = useState(true);
   
   const pendingActions = acciones.filter(a => a.estado === "pendiente" || a.estado === "en_progreso").length;
   const unreadAlerts = alertas.filter(a => !a.leida).length;
   const pendingRisks = acciones.filter(a => a.estado === "pendiente").length;
 
+  const cargarSuscripcion = useCallback(async (id: string) => {
+    setLoadingSuscripcion(true);
+    const e = await suscripcionService.getEstadoSuscripcion(id);
+    setEstadoSuscripcion(e);
+    setPlan(e.plan);
+    setLoadingSuscripcion(false);
+  }, []);
+
   useEffect(() => {
-    if (empresa?.id) {
-      suscripcionService.getPlan(empresa.id).then(p => setPlan(p));
+    if (empresa?.plan) {
+      setPlan(empresa.plan);
     }
-  }, [empresa?.id]);
+  }, [empresa?.plan]);
+
+  useEffect(() => {
+    if (!empresa?.id) return;
+    cargarSuscripcion(empresa.id);
+
+    // Escuchar cambios en tiempo real: cuando el admin asigna un plan,
+    // el cliente ve el nuevo estado inmediatamente sin recargar la página.
+    const channel = supabase
+      .channel(`suscripcion_${empresa.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'empresas',
+          filter: `id=eq.${empresa.id}`,
+        },
+        () => {
+          cargarSuscripcion(empresa.id);
+          refresh(); // Refrescamos el contexto global de la empresa ante cambios en la DB
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [empresa?.id, cargarSuscripcion]);
 
   const getNavItems = () => {
     const items = [
@@ -108,10 +143,10 @@ export function AppLayout({ children }: AppLayoutProps) {
       { to: "/alertas", icon: Bell, label: "Alertas", badge: unreadAlerts > 0 ? unreadAlerts.toString() : null, modulo: 'alertas' as Modulo, requerido: 'basic' },
       { to: "/capacitacion", icon: HelpCircle, label: "Capacitación", badge: null, modulo: 'capacitacion' as Modulo, requerido: null },
       { to: "/phishing", icon: Mail, label: "Phishing", badge: null, modulo: 'phishing' as Modulo, requerido: 'basic' },
-      { to: "/marketplace", icon: Shield, label: "Marketplace", badge: null, modulo: 'documentos' as Modulo, requerido: null },
+      { to: "/marketplace", icon: Shield, label: "Marketplace", badge: null, modulo: 'diagnostico' as Modulo, requerido: null },
       { to: "/microsoft365", icon: Server, label: "Microsoft 365", badge: null, modulo: 'microsoft365' as Modulo, requerido: 'pro' },
       { to: "/vulnerabilidades", icon: Bug, label: "Vulnerabilidades", badge: null, modulo: 'vulnerabilidades' as Modulo, requerido: 'pro' },
-      { to: "/planes", icon: CreditCard, label: "Planes", badge: null, modulo: 'acciones' as Modulo, requerido: null, ocultoAdmin: true },
+      { to: "/planes", icon: CreditCard, label: "Planes", badge: null, modulo: 'diagnostico' as Modulo, requerido: null, ocultoAdmin: true },
       { to: "/sobre-chv", icon: Info, label: "Sobre CHV", badge: null, modulo: 'diagnostico' as Modulo, requerido: null },
       { to: "/usuarios", icon: Users, label: "Usuarios", badge: null, modulo: 'acciones' as Modulo, requerido: 'basic' },
       { to: "/chat-ciberseguridad", icon: MessageCircle, label: "Experto Ciberseguridad", badge: null, modulo: 'chat' as Modulo, requerido: 'basic' },
@@ -142,14 +177,28 @@ export function AppLayout({ children }: AppLayoutProps) {
     if (isAdmin) return true;
     if (!usuario) return true;
     if (usuario.rol === 'admin') return true;
-    if (!tienePlan(item.requerido)) return false;
     return tieneAcceso(item.modulo);
   });
 
   const currentModulo = RUTA_MODULO[location.pathname];
-  const isUserAdmin = usuario?.rol === 'admin' || isAdmin;
-  if (!loadingUsuario && currentModulo && !isUserAdmin && usuario && !tieneAcceso(currentModulo)) {
-    return <Navigate to="/dashboard" replace />;
+  const isUserAdmin = usuario?.rol === 'admin' || usuario?.rol === 'super_admin' || isAdmin;
+  const isAdminPath = location.pathname.startsWith('/admin');
+
+  // Redirección de seguridad
+  if (!loadingUsuario) {
+    // Si intenta entrar a admin y no tiene permiso
+    if (isAdminPath && !isUserAdmin) {
+      return <Navigate to="/dashboard" replace />;
+    }
+    // Verificación de módulos para usuarios normales
+    if (currentModulo && currentModulo !== 'diagnostico' && !isUserAdmin && usuario && !tieneAcceso(currentModulo)) {
+      return <Navigate to="/dashboard" replace />;
+    }
+
+    // REDIRECCIÓN POR BLOQUEO DE SUSCRIPCIÓN
+    if (estadoSuscripcion?.estaBloqueada && !isAdmin && location.pathname !== '/bloqueado') {
+      return <Navigate to="/bloqueado" replace />;
+    }
   }
 
   return (
@@ -214,7 +263,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         <nav className="flex-1 overflow-y-auto scrollbar-thin px-3 py-2 space-y-0.5">
           {navItems.map(({ to, icon: Icon, label, badge, requerido }) => {
             const isActive = location.pathname === to;
-            const blocked = requerido && !tienePlan(requerido);
+            const blocked = requerido && !tienePlan(requerido) && !isAdmin;
             return (
               <Link
                 key={to}
@@ -303,6 +352,62 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* Page content */}
         <RealtimeNotifications empresaId={empresa?.id} />
+        
+        {/* Banner de Suscripción — solo planes pagos con fecha_fin próxima a vencer */}
+        {!isAdmin && estadoSuscripcion && estadoSuscripcion.fecha_fin && location.pathname !== '/bloqueado' && (() => {
+          const { diasRestantes, estaVencida, fecha_fin } = estadoSuscripcion;
+          const fechaFinStr = fecha_fin
+            ? new Date(fecha_fin).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
+            : '';
+          // 2 días de gracia: calcular días que quedan de gracia después del vencimiento
+          const fechaBloqueo = fecha_fin ? new Date(new Date(fecha_fin).getTime() + 2 * 24 * 60 * 60 * 1000) : null;
+          const diasGracia = fechaBloqueo
+            ? Math.max(0, Math.ceil((fechaBloqueo.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+            : 0;
+
+          if (estaVencida) {
+            // Licencia vencida (incluyendo gracia ya terminada)
+            // Nota: El usuario será redirigido a /bloqueado por la lógica de arriba, 
+            // pero esto es un respaldo visual.
+            return (
+              <div className="px-6 py-2.5 flex items-center justify-between gap-4 bg-red-600 text-white animate-in slide-in-from-top duration-500">
+                <div className="flex items-center gap-2 text-sm font-bold">
+                  <AlertTriangle size={18} className="shrink-0" />
+                  <span>
+                    ⚠️ Tu licencia venció el <strong>{fechaFinStr}</strong>. Tu cuenta está bloqueada.
+                  </span>
+                </div>
+                <Link to="/planes">
+                  <Badge variant="outline" className="cursor-pointer hover:bg-white/20 transition-colors uppercase font-black px-3 py-1 border-white text-white shrink-0">
+                    Renovar Ahora
+                  </Badge>
+                </Link>
+              </div>
+            );
+          }
+
+          if (diasRestantes <= 5 && diasRestantes > 0) {
+            // Licencia vigente pero próxima a vencer (estos 5 días ya incluyen el final del periodo de gracia)
+            return (
+              <div className="px-6 py-2.5 flex items-center justify-between gap-4 bg-warning text-warning-foreground animate-in slide-in-from-top duration-500">
+                <div className="flex items-center gap-2 text-sm font-bold">
+                  <AlertTriangle size={18} className="shrink-0" />
+                  <span>
+                    Atención: Tu periodo de acceso (incluyendo días de gracia) termina el <strong>{fechaFinStr}</strong> ({diasRestantes} {diasRestantes === 1 ? 'día' : 'días'}).
+                  </span>
+                </div>
+                <Link to="/planes">
+                  <Badge variant="outline" className="cursor-pointer hover:bg-white/20 transition-colors uppercase font-black px-3 py-1 border-warning-foreground text-warning-foreground shrink-0">
+                    Renovar Ahora
+                  </Badge>
+                </Link>
+              </div>
+            );
+          }
+
+          return null;
+        })()}
+
         <main className="flex-1 overflow-y-auto scrollbar-thin">
           {children}
         </main>

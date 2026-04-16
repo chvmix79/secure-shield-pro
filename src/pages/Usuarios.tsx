@@ -17,8 +17,7 @@ const roleConfig = {
 };
 
 export default function Usuarios() {
-  const { empresa } = useEmpresa();
-  const isAdmin = localStorage.getItem("is_admin") === "true";
+  const { empresa, isAdmin } = useEmpresa();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);

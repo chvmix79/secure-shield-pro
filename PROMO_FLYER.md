@@ -20,5 +20,7 @@ En un mundo cada vez más conectado, la seguridad de tu empresa no puede ser una
 **¿Estás listo para el siguiente nivel de protección?**
 👉 [Empieza tu diagnóstico gratuito hoy](http://localhost:5173/diagnostico)
 
+📞 **Teléfono:** +573008820783 | ✉️ **Correo:** chv.79@hotmail.com
+
 ---
-*© 2024 CHV CyberDefense - Protección con Sello de Excelencia.*
+*© 2026 CHV CyberDefense - Protección con Sello de Excelencia.*

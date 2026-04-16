@@ -98,23 +98,51 @@ export const suscripcionService = {
     
     const ahora = new Date();
     const fechaFin = data.fecha_fin ? new Date(data.fecha_fin) : null;
-    const diasRestantes = fechaFin ? Math.ceil((fechaFin.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-    const estaVencida = fechaFin ? fechaFin < ahora : false;
-    const estaBloqueada = data.cuenta_bloqueada === true;
-    
+    const diasRestantes = fechaFin
+      ? Math.ceil((fechaFin.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24))
+      : 0;
+
+    // La fecha_fin es la fuente de verdad absoluta:
+    // Si fecha_fin está en el futuro → la suscripción está ACTIVA.
+    const licenciaVigente = fechaFin ? fechaFin > ahora : false;
+    const estaVencida = fechaFin ? fechaFin <= ahora : false;
+
+    // Con el nuevo esquema, 'estaBloqueada' ocurre inmediatamente si la licencia no es vigente,
+    // ya que los 2 días de gracia ya están sumados a la fecha_fin.
+    const estaBloqueada = (data.cuenta_bloqueada === true && !licenciaVigente) || estaVencida;
+
     let plan = data.plan as PlanType;
     let subscription_status = data.subscription_status;
-    
-    if (estaBloqueada) {
+
+    if (licenciaVigente) {
+      // La licencia está vigente → siempre activa, limpiar estados viejos si quedaron sucios
+      subscription_status = 'active';
+      if (data.subscription_status !== 'active' || data.cuenta_bloqueada === true) {
+        await supabase
+          .from('empresas')
+          .update({ subscription_status: 'active', cuenta_bloqueada: false, fecha_bloqueo: null })
+          .eq('id', empresaId);
+      }
+    } else if (estaBloqueada) {
+      // Superó período de gracia → bloqueo definitivo
+      if (!data.cuenta_bloqueada) {
+        await supabase
+          .from('empresas')
+          .update({ cuenta_bloqueada: true, fecha_bloqueo: ahora.toISOString() })
+          .eq('id', empresaId);
+      }
       subscription_status = 'blocked';
-    } else if (data.subscription_status === 'cancelled' || data.subscription_status === 'expired') {
-      plan = 'free';
     } else if (estaVencida) {
-      await supabase
-        .from('empresas')
-        .update({ subscription_status: 'expired' })
-        .eq('id', empresaId);
+      // Vencida pero dentro de los 2 días de gracia
+      if (data.subscription_status !== 'expired') {
+        await supabase
+          .from('empresas')
+          .update({ subscription_status: 'expired' })
+          .eq('id', empresaId);
+      }
       subscription_status = 'expired';
+    } else if (data.subscription_status === 'cancelled') {
+      plan = 'free';
     }
     
     return {
@@ -142,8 +170,11 @@ export const suscripcionService = {
   async upgradePlan(empresaId: string, nuevoPlan: PlanType, durationDays: number = 30) {
     const fechaInicio = new Date();
     const fechaFin = new Date();
-    fechaFin.setDate(fechaFin.getDate() + durationDays);
+    // Sumamos la duración solicitada (ej. 30 días) + 2 días de gracia reglamentarios
+    // Esto asegura que el plan dure activo los tiempos contratados íntegramente.
+    fechaFin.setDate(fechaFin.getDate() + durationDays + 2);
 
+    // Siempre reinicia TODOS los campos de estado al asignar un nuevo plan
     const { data, error } = await supabase
       .from('empresas')
       .update({
@@ -151,6 +182,8 @@ export const suscripcionService = {
         fecha_inicio: fechaInicio.toISOString(),
         fecha_fin: fechaFin.toISOString(),
         subscription_status: 'active',
+        cuenta_bloqueada: false,
+        fecha_bloqueo: null,
       })
       .eq('id', empresaId)
       .select()
@@ -173,7 +206,8 @@ export const suscripcionService = {
     if (fechaFin < new Date()) {
       fechaFin = new Date();
     }
-    fechaFin.setDate(fechaFin.getDate() + durationDays);
+    // Al renovar, también sumamos los 2 días de gracia automáticos
+    fechaFin.setDate(fechaFin.getDate() + durationDays + 2);
 
     const { data, error } = await supabase
       .from('empresas')
@@ -181,6 +215,8 @@ export const suscripcionService = {
         fecha_inicio: new Date().toISOString(),
         fecha_fin: fechaFin.toISOString(),
         subscription_status: 'active',
+        cuenta_bloqueada: false,
+        fecha_bloqueo: null,
       })
       .eq('id', empresaId)
       .select()
@@ -206,6 +242,10 @@ export const suscripcionService = {
     const features = PLANES[plan].features;
     
     switch (modulo) {
+      case 'riesgos': return plan !== 'free';
+      case 'acciones': return plan !== 'free';
+      case 'evidencias': return plan !== 'free';
+      case 'alertas': return plan !== 'free';
       case 'phishing': return features.moduloPhishing;
       case 'vulnerabilidades': return features.moduloVulnerabilidades;
       case 'microsoft365': return features.moduloMicrosoft365;

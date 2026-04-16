@@ -23,13 +23,13 @@ ALTER TABLE cumplimiento_documentos ENABLE ROW LEVEL SECURITY;
 
 -- 3. Políticas de acceso (Totalmente abiertas para evitar bloqueos)
 DROP POLICY IF EXISTS "cumplimiento_select" ON cumplimiento_documentos;
-CREATE POLICY "cumplimiento_select" ON cumplimiento_documentos FOR SELECT USING (true);
+CREATE POLICY "cumplimiento_select" ON cumplimiento_documentos FOR SELECT USING (empresa_id IN (SELECT id FROM empresas WHERE user_id = auth.uid()) OR is_global_admin());
 
 DROP POLICY IF EXISTS "cumplimiento_insert" ON cumplimiento_documentos;
-CREATE POLICY "cumplimiento_insert" ON cumplimiento_documentos FOR INSERT WITH CHECK (true);
+CREATE POLICY "cumplimiento_insert" ON cumplimiento_documentos FOR INSERT WITH CHECK (empresa_id IN (SELECT id FROM empresas WHERE user_id = auth.uid()) OR is_global_admin());
 
 DROP POLICY IF EXISTS "cumplimiento_update" ON cumplimiento_documentos;
-CREATE POLICY "cumplimiento_update" ON cumplimiento_documentos FOR UPDATE USING (true);
+CREATE POLICY "cumplimiento_update" ON cumplimiento_documentos FOR UPDATE USING (empresa_id IN (SELECT id FROM empresas WHERE user_id = auth.uid()) OR is_global_admin());
 
 -- 4. DATA SEED (Carga las normas directamente para todas las empresas)
 INSERT INTO cumplimiento_documentos (empresa_id, nombre, categoria, norma, estado)

@@ -1132,7 +1132,7 @@ export function getQuestionsBySector(sector: string | null | undefined): typeof 
   return [...diagnosticQuestions, ...sectorQuestions[sector]];
 }
 
-export function getQuestionsWithNormativas(): typeof diagnosticQuestions {
+export function getQuestionsWithNormativas(sector?: string): typeof diagnosticQuestions {
   const normativasQuestions = [
     // ========== ISO 27001 ==========
     {
@@ -1210,43 +1210,17 @@ export function getQuestionsWithNormativas(): typeof diagnosticQuestions {
         { label: "No hay segmentación", score: 0 },
       ],
     },
-    // ========== HIPAA ==========
-    {
-      id: "hipaa1",
-      category: "HIPAA",
-      icon: "🏥",
-      question: "¿Cumplen con HIPAA para protección de información de salud (PHI)?",
-      description: "Health Insurance Portability and Accountability Act.",
-      options: [
-        { label: "Sí, con BAA firmados con todos los proveedores", score: 10 },
-        { label: "Parcialmente, algunos proveedores", score: 5 },
-        { label: "No procesamos PHI", score: 10 },
-      ],
-    },
-    // ========== SOC 2 ==========
-    {
-      id: "soc1",
-      category: "SOC 2",
-      icon: "📊",
-      question: "¿Tienen informe SOC 2 (Type I o Type II)?",
-      description: "Service Organization Control para servicios digitales.",
-      options: [
-        { label: "Sí, SOC 2 Type II vigente", score: 10 },
-        { label: "SOC 2 Type I o en proceso", score: 5 },
-        { label: "No tenemos SOC 2", score: 0 },
-      ],
-    },
-    // ========== CIBERSEGURIDAD COLOMBIA ==========
+    // ========== NORMATIVAS (CASO COLOMBIA EJEMPLO) ==========
     {
       id: "col1",
       category: "Colombia",
       icon: "🇨🇴",
-      question: "¿Conocen y cumplen con la Ley 1581 de 2012 de Protección de Datos Personales?",
-      description: "Régimen general de protección de datos en Colombia.",
+      question: "¿Están registrados sus bases de datos en el RNBD de la SIC?",
+      description: "Registro Nacional de Bases de Datos (Ley 1581 de 2012).",
       options: [
-        { label: "Sí, completamente adaptados", score: 10 },
-        { label: "En proceso de adaptación", score: 5 },
-        { label: "No conocemos la ley", score: 0 },
+        { label: "Sí, registro al día", score: 10 },
+        { label: "Estamos obligados pero no lo hemos hecho", score: 0 },
+        { label: "No estamos obligados por tamaño/activos", score: 10 },
       ],
     },
     {
@@ -1274,6 +1248,10 @@ export function getQuestionsWithNormativas(): typeof diagnosticQuestions {
       ],
     },
   ];
+  
+  if (sector && sectorQuestions[sector.toLowerCase()]) {
+    return [...diagnosticQuestions, ...normativasQuestions, ...sectorQuestions[sector.toLowerCase()]];
+  }
   
   return [...diagnosticQuestions, ...normativasQuestions];
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,21 @@ import { getQuestionsWithNormativas } from "@/lib/cybersecurity-data";
 import { accionService } from "@/lib/services";
 import { useEmpresa } from "@/hooks/useEmpresa";
 import type { ActionStatus, ActionPriority } from "@/lib/database.types";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { supabase } from "@/lib/supabase";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter
+} from "@/components/ui/dialog";
 import { 
   CheckCircle2, 
   Circle, 
@@ -20,18 +35,14 @@ import {
   ChevronRight, 
   Shield, 
   FileText, 
-  AlertCircle 
+  AlertCircle,
+  Link as LinkIcon,
+  Paperclip,
+  Plus,
+  Trash2,
+  ExternalLink,
+  Upload
 } from "lucide-react";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription,
-  DialogFooter
-} from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
 const EMPRESA_DEMO_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -50,12 +61,25 @@ const priorityConfig: Record<string, { label: string; color: string; dot: string
 };
 
 export default function Acciones() {
-  const { acciones, diagnostico, refresh } = useEmpresa();
+  const { acciones, diagnostico, refresh, evidencias, createEvidencia } = useEmpresa();
   const [filter, setFilter] = useState("todas");
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedAction, setSelectedAction] = useState<any | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  
+  // States for new evidence
+  const [evidLink, setEvidLink] = useState("");
+  const [evidNotes, setEvidNotes] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [showAddEvidence, setShowAddEvidence] = useState(false);
+  const [uploadMode, setUploadMode] = useState<"file" | "url">("file");
+  const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const actionEvidences = selectedAction 
+    ? evidencias.filter(e => e.accion_id === selectedAction.id)
+    : [];
 
   const filtered = acciones.filter((a) => filter === "todas" || a.estado === filter);
 
@@ -64,6 +88,9 @@ export default function Acciones() {
     try {
       await accionService.updateStatus(id, next);
       await refresh();
+      if (selectedAction && selectedAction.id === id) {
+        setSelectedAction({ ...selectedAction, estado: next });
+      }
       toast.success(`Acción movida a ${statusConfig[next].label}`, {
         description: "El listado se ha actualizado según el nuevo estado.",
         duration: 3000
@@ -73,6 +100,63 @@ export default function Acciones() {
       toast.error("Error al actualizar el estado");
     } finally {
       setLoadingId(null);
+    }
+  }
+
+  async function handleAddEvidence() {
+    if (!selectedAction) return;
+
+    if (uploadMode === 'url' && !evidLink) {
+      toast.error("Debes ingresar un link para la evidencia");
+      return;
+    }
+
+    if (uploadMode === 'file' && !file) {
+      toast.error("Debes seleccionar un archivo");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      let archivo_url = evidLink;
+      let finalTitle = evidLink ? "Evidencia vía Link" : "Evidencia de archivo";
+
+      if (uploadMode === 'file' && file) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${selectedAction.empresa_id || 'global'}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('evidencias')
+          .upload(fileName, file);
+          
+        if (uploadError) throw uploadError;
+        
+        const { data: publicUrlData } = supabase.storage
+          .from('evidencias')
+          .getPublicUrl(fileName);
+          
+        archivo_url = publicUrlData.publicUrl;
+        finalTitle = file.name;
+      }
+
+      await createEvidencia({
+        accion_id: selectedAction.id,
+        titulo: finalTitle.substring(0, 100),
+        tipo: uploadMode === 'file' ? 'documento' : 'captura',
+        archivo_url: archivo_url || null,
+        notas: evidNotes || null
+      });
+      
+      toast.success("Evidencia adjuntada con éxito");
+      setEvidLink("");
+      setEvidNotes("");
+      setFile(null);
+      setShowAddEvidence(false);
+    } catch (error: any) {
+      console.error('Error adding evidence:', error);
+      toast.error(error.message || "Error al adjuntar evidencia");
+    } finally {
+      setIsUploading(false);
     }
   }
 
@@ -281,7 +365,14 @@ export default function Acciones() {
           </div>
         )}
 
-        <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <Dialog open={isDetailOpen} onOpenChange={(open) => {
+          setIsDetailOpen(open);
+          if (!open) {
+            setShowAddEvidence(false);
+            setEvidLink("");
+            setEvidNotes("");
+          }
+        }}>
           <DialogContent className="max-w-2xl bg-background border-border">
             {selectedAction && (
               <>
@@ -317,7 +408,7 @@ export default function Acciones() {
                   </div>
 
                   <div className="space-y-3">
-                    <h4 className="text-sm font-bold text-foreground mb-2">Estado de la Acción</h4>
+                    <h4 className="text-sm font-bold text-foreground mb-2 text-primary uppercase tracking-tight">Estado de la Acción</h4>
                     <div className="grid grid-cols-3 gap-3">
                       {[
                         { id: 'pendiente', label: 'Pendiente', icon: Circle, color: 'text-muted-foreground bg-muted' },
@@ -342,6 +433,154 @@ export default function Acciones() {
                       ))}
                     </div>
                   </div>
+
+                  <div className="space-y-4 pt-4 border-t border-border/50">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                        <Paperclip size={16} className="text-primary" /> Evidencias Adjuntas
+                      </h4>
+                      {!showAddEvidence && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 text-[10px] bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary"
+                          onClick={() => setShowAddEvidence(true)}
+                        >
+                          <Plus size={12} className="mr-1" /> Adjuntar Nueva
+                        </Button>
+                      )}
+                    </div>
+
+                    {showAddEvidence ? (
+                      <div className="bg-muted/30 border border-dashed border-border rounded-xl p-4 space-y-4 animate-in fade-in slide-in-from-top-2">
+                        <Tabs value={uploadMode} onValueChange={(val: any) => setUploadMode(val)} className="w-full">
+                          <TabsList className="grid w-full grid-cols-2 h-8">
+                            <TabsTrigger value="file" className="text-[10px]"><Plus size={12} className="mr-1" /> Archivo</TabsTrigger>
+                            <TabsTrigger value="url" className="text-[10px]"><LinkIcon size={12} className="mr-1" /> Link</TabsTrigger>
+                          </TabsList>
+                          
+                          <TabsContent value="file" className="mt-4">
+                            <div 
+                              onClick={() => fileInputRef.current?.click()}
+                              className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors bg-background/30"
+                            >
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                ref={fileInputRef} 
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files.length > 0) {
+                                    setFile(e.target.files[0]);
+                                  }
+                                }}
+                              />
+                              {file ? (
+                                <div className="space-y-1">
+                                  <CheckCircle2 size={24} className="mx-auto text-success" />
+                                  <p className="text-xs font-semibold text-foreground truncate max-w-full px-2">{file.name}</p>
+                                  <p className="text-[10px] text-muted-foreground">Clic para cambiar</p>
+                                </div>
+                              ) : (
+                                <div className="space-y-1">
+                                  <Upload size={24} className="mx-auto text-muted-foreground mb-1" />
+                                  <p className="text-xs font-medium text-foreground">Seleccionar archivo</p>
+                                  <p className="text-[10px] text-muted-foreground">PDF, Word, Imagen (Max 10MB)</p>
+                                </div>
+                              )}
+                            </div>
+                          </TabsContent>
+                          
+                          <TabsContent value="url" className="mt-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="evid-link" className="text-xs font-semibold">Link de Evidencia (Drive, SharePoint, etc.)</Label>
+                              <div className="relative">
+                                <LinkIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                  id="evid-link"
+                                  placeholder="https://..."
+                                  className="pl-9 h-9 text-sm bg-background/50"
+                                  value={evidLink}
+                                  onChange={(e) => setEvidLink(e.target.value)}
+                                />
+                              </div>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="evid-notes" className="text-xs font-semibold">Notas adicionales (opcional)</Label>
+                          <Textarea
+                            id="evid-notes"
+                            placeholder="Describe qué contiene esta evidencia..."
+                            className="text-sm min-h-[80px] resize-none bg-background/50"
+                            value={evidNotes}
+                            onChange={(e) => setEvidNotes(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-8 text-xs"
+                            onClick={() => {
+                              setShowAddEvidence(false);
+                              setFile(null);
+                            }}
+                            disabled={isUploading}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            className="h-8 text-xs bg-primary text-primary-foreground"
+                            onClick={handleAddEvidence}
+                            disabled={isUploading || (uploadMode === 'file' ? !file : !evidLink)}
+                          >
+                            {isUploading ? <Loader2 size={14} className="animate-spin mr-2" /> : <CheckCircle2 size={14} className="mr-2" />}
+                            {isUploading ? "Subiendo..." : "Guardar Evidencia"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {actionEvidences.length > 0 ? (
+                          actionEvidences.map((evid) => (
+                            <div key={evid.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border/50 group hover:border-primary/30 transition-all">
+                              <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="p-2 rounded-md bg-background border border-border">
+                                  {evid.archivo_url?.startsWith('http') ? <LinkIcon size={14} className="text-primary" /> : <Paperclip size={14} className="text-muted-foreground" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold truncate text-foreground">{evid.titulo}</p>
+                                  {evid.notas && <p className="text-[10px] text-muted-foreground truncate">{evid.notas}</p>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {evid.archivo_url && (
+                                  <a 
+                                    href={evid.archivo_url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 rounded-md hover:bg-primary/10 text-primary transition-colors"
+                                    title="Ver evidencia"
+                                  >
+                                    <ExternalLink size={14} />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-8 border border-dashed border-border rounded-xl bg-muted/20">
+                            <Paperclip size={24} className="mx-auto text-muted-foreground/20 mb-2" />
+                            <p className="text-xs text-muted-foreground">No hay evidencias cargadas aún</p>
+                            <p className="text-[10px] text-muted-foreground/60 mt-1">Sube un archivo o pega un link para validar esta acción</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <DialogFooter className="flex sm:justify-between items-center gap-4 border-t border-border pt-6">
@@ -352,10 +591,6 @@ export default function Acciones() {
                   <div className="flex gap-3">
                     <Button variant="ghost" onClick={() => setIsDetailOpen(false)}>
                       Cerrar
-                    </Button>
-                    <Button className="bg-primary text-primary-foreground">
-                      <FileText size={16} className="mr-2" />
-                      Adjuntar Evidencia
                     </Button>
                   </div>
                 </DialogFooter>
