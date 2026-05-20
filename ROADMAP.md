@@ -134,9 +134,9 @@ Las IAs de desarrollo asistido que colaboren en el proyecto deben:
 ---
 
 # 📌 BACKLOG (FUTURO)
-- [ ] Módulo simulador de phishing con plantillas de correo editables por el auditor.
-- [ ] Integración automática mediante Webhooks para auditoría continua de endpoints.
-- [ ] Exportación avanzada de informes ejecutivos en formatos PDF personalizables y XLSX.
+- [x] Módulo simulador de phishing con plantillas de correo editables por el auditor.
+- [x] Integración automática mediante Webhooks para auditoría continua de endpoints.
+- [x] Exportación avanzada de informes ejecutivos en formatos PDF personalizables y XLSX.
 
 ---
 
