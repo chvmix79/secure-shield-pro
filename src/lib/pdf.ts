@@ -29,7 +29,12 @@ export function generateDiagnosticPDF(
   doc.text(`Empresa: ${empresa.nombre}`, margin, y);
   y += 10;
   doc.text(`Sector: ${empresa.sector}`, margin, y);
-  y += 15;
+  y += 10;
+  if (diagnostico.departamento) {
+    doc.text(`Departamento: ${diagnostico.departamento}`, margin, y);
+    y += 10;
+  }
+  y += 5;
 
   const securityInfo = calculateSecurityLevel(diagnostico.score);
   

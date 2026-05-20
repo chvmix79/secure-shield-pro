@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { AppLayout } from "@/components/AppLayout";
-import { Mail, AlertTriangle, CheckCircle2, XCircle, MousePointer, Eye, EyeOff, Send, Users, BarChart3, RefreshCw, Calendar, Play, Pause, Clock, Rocket } from "lucide-react";
+import { Mail, AlertTriangle, CheckCircle2, XCircle, MousePointer, Eye, EyeOff, Send, Users, BarChart3, RefreshCw, Calendar, Play, Pause, Clock, Rocket, Plus, Edit, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -25,6 +25,18 @@ interface ProgramaPhishing {
   total_enviados: number;
   total_clics: number;
   total_reportados: number;
+  plantilla_id?: string | null;
+}
+
+interface PlantillaPhishing {
+  id: string;
+  empresa_id: string | null;
+  nombre: string;
+  remitente: string;
+  asunto: string;
+  contenido: string;
+  dificultad: "baja" | "media" | "alta";
+  es_global: boolean;
 }
 
 interface CampañaPhishing {
@@ -119,8 +131,14 @@ export default function PhishingSimulations() {
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [programas, setProgramas] = useState<ProgramaPhishing[]>([]);
   const [campañas, setCampañas] = useState<CampañaPhishing[]>([]);
-  const [newPrograma, setNewPrograma] = useState({ nombre: "", descripcion: "", frecuencia: "mensual" });
+  const [newPrograma, setNewPrograma] = useState({ nombre: "", descripcion: "", frecuencia: "mensual", plantilla_id: "random" });
   const [dialogOpen, setDialogOpen] = useState(false);
+  
+  const [plantillas, setPlantillas] = useState<PlantillaPhishing[]>([]);
+  const [dialogPlantillaOpen, setDialogPlantillaOpen] = useState(false);
+  const [editingPlantilla, setEditingPlantilla] = useState<PlantillaPhishing | null>(null);
+  const [newPlantilla, setNewPlantilla] = useState<Partial<PlantillaPhishing>>({ nombre: "", remitente: "", asunto: "", contenido: "", dificultad: "media" });
+  
   const [loading, setLoading] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -142,6 +160,14 @@ export default function PhishingSimulations() {
         .eq('empresa_id', empresa.id)
         .order('created_at', { ascending: false });
       if (camps) setCampañas(camps);
+
+      // Cargar plantillas
+      const { data: plants } = await supabase
+        .from('plantillas_phishing')
+        .select('*')
+        .or(`empresa_id.eq.${empresa.id},es_global.eq.true`)
+        .order('created_at', { ascending: false });
+      if (plants) setPlantillas(plants);
     } catch (error) {
       console.error('Error loading phishing data:', error);
     }
@@ -170,10 +196,11 @@ export default function PhishingSimulations() {
         descripcion: newPrograma.descripcion,
         frecuencia: newPrograma.frecuencia,
         proxima_envio: proximaEnvio.toISOString(),
-        estado: 'activo'
+        estado: 'activo',
+        plantilla_id: newPrograma.plantilla_id === 'random' ? null : newPrograma.plantilla_id
       });
 
-      setNewPrograma({ nombre: "", descripcion: "", frecuencia: "mensual" });
+      setNewPrograma({ nombre: "", descripcion: "", frecuencia: "mensual", plantilla_id: "random" });
       setDialogOpen(false);
       loadData();
       toast.success("Programa creado correctamente");
@@ -183,7 +210,7 @@ export default function PhishingSimulations() {
     setLoading(false);
   };
 
-  const handleLaunchCampaign = async (nombre: string) => {
+  const handleLaunchCampaign = async (nombre: string, plantilla_id?: string | null) => {
     if (!empresa?.id) return;
     setLoading(true);
     try {
@@ -193,7 +220,8 @@ export default function PhishingSimulations() {
         .insert({
           empresa_id: empresa.id,
           nombre: `Simulación: ${nombre}`,
-          estado: 'pendiente'
+          estado: 'pendiente',
+          plantilla_id: plantilla_id || null
         })
         .select()
         .single();
@@ -202,7 +230,10 @@ export default function PhishingSimulations() {
 
       // 2. Llamar a la Edge Function para enviarla
       const { data, error } = await supabase.functions.invoke('send-phishing', {
-        body: { campaña_id: camp.id }
+        body: { 
+          campaña_id: camp.id,
+          plantilla_id: plantilla_id || null
+        }
       });
 
       if (error) throw error;
@@ -214,6 +245,48 @@ export default function PhishingSimulations() {
       toast.error("Error al lanzar la simulación técnica");
     }
     setLoading(false);
+  };
+
+  const savePlantilla = async () => {
+    if (!empresa?.id) return;
+    setLoading(true);
+    try {
+      if (editingPlantilla) {
+        await supabase.from('plantillas_phishing').update({
+          nombre: newPlantilla.nombre,
+          remitente: newPlantilla.remitente,
+          asunto: newPlantilla.asunto,
+          contenido: newPlantilla.contenido,
+          dificultad: newPlantilla.dificultad
+        }).eq('id', editingPlantilla.id);
+        toast.success("Plantilla actualizada");
+      } else {
+        await supabase.from('plantillas_phishing').insert({
+          empresa_id: empresa.id,
+          nombre: newPlantilla.nombre,
+          remitente: newPlantilla.remitente,
+          asunto: newPlantilla.asunto,
+          contenido: newPlantilla.contenido,
+          dificultad: newPlantilla.dificultad,
+          es_global: false
+        });
+        toast.success("Plantilla creada");
+      }
+      setDialogPlantillaOpen(false);
+      setEditingPlantilla(null);
+      setNewPlantilla({ nombre: "", remitente: "", asunto: "", contenido: "", dificultad: "media" });
+      loadData();
+    } catch (error) {
+      toast.error("Error al guardar plantilla");
+    }
+    setLoading(false);
+  };
+
+  const deletePlantilla = async (id: string) => {
+    if (!confirm("¿Seguro que deseas eliminar esta plantilla?")) return;
+    await supabase.from('plantillas_phishing').delete().eq('id', id);
+    toast.success("Plantilla eliminada");
+    loadData();
   };
 
   const toggleProgramaEstado = async (id: string, actual: string) => {
@@ -270,6 +343,7 @@ export default function PhishingSimulations() {
           <TabsList>
             <TabsTrigger value="ejercicios">Ejercicios IA</TabsTrigger>
             <TabsTrigger value="campañas">Programas</TabsTrigger>
+            <TabsTrigger value="plantillas">Plantillas</TabsTrigger>
             <TabsTrigger value="resultados">Resultados Reales</TabsTrigger>
           </TabsList>
 
@@ -396,6 +470,22 @@ export default function PhishingSimulations() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-2">
+                      <Label>Plantilla a enviar</Label>
+                      <Select value={newPrograma.plantilla_id} onValueChange={(v) => setNewPrograma({...newPrograma, plantilla_id: v})}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar plantilla" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="random">Aleatoria (IA decide)</SelectItem>
+                          {plantillas.map(p => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.nombre} {p.es_global && '(Global)'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className="flex justify-end gap-3 pt-4">
                       <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
                       <Button onClick={createPrograma} disabled={!newPrograma.nombre || loading}>
@@ -449,7 +539,7 @@ export default function PhishingSimulations() {
                         <Button 
                           size="sm" 
                           className="bg-primary hover:bg-primary/90"
-                          onClick={() => handleLaunchCampaign(prog.nombre)}
+                          onClick={() => handleLaunchCampaign(prog.nombre, prog.plantilla_id)}
                           disabled={loading}
                         >
                           <Rocket className="mr-2 h-4 w-4" />
@@ -487,6 +577,118 @@ export default function PhishingSimulations() {
                   <Mail size={48} className="mx-auto text-muted-foreground mb-4 opacity-20" />
                   <p className="text-muted-foreground">No has configurado ningún programa de entrenamiento.</p>
                   <Button variant="link" onClick={() => setDialogOpen(true)}>Crea el primero ahora</Button>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="plantillas" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Plantillas de Phishing</h2>
+              <Dialog open={dialogPlantillaOpen} onOpenChange={(open) => {
+                setDialogPlantillaOpen(open);
+                if (!open) {
+                  setEditingPlantilla(null);
+                  setNewPlantilla({ nombre: "", remitente: "", asunto: "", contenido: "", dificultad: "media" });
+                }
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="bg-primary hover:bg-primary/90">
+                    <Plus size={16} className="mr-2" />
+                    Nueva Plantilla
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-xl">
+                  <DialogHeader>
+                    <DialogTitle>{editingPlantilla ? 'Editar Plantilla' : 'Crear Plantilla Personalizada'}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 pt-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Nombre de Plantilla</Label>
+                        <Input value={newPlantilla.nombre} onChange={(e) => setNewPlantilla({...newPlantilla, nombre: e.target.value})} placeholder="Ej. Falsa Promoción" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Dificultad</Label>
+                        <Select value={newPlantilla.dificultad} onValueChange={(v: any) => setNewPlantilla({...newPlantilla, dificultad: v})}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="baja">Baja (Evidente)</SelectItem>
+                            <SelectItem value="media">Media (Realista)</SelectItem>
+                            <SelectItem value="alta">Alta (Sofisticado)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Remitente Falso</Label>
+                      <Input value={newPlantilla.remitente} onChange={(e) => setNewPlantilla({...newPlantilla, remitente: e.target.value})} placeholder="soporte@empresa-falsa.com" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Asunto del Correo</Label>
+                      <Input value={newPlantilla.asunto} onChange={(e) => setNewPlantilla({...newPlantilla, asunto: e.target.value})} placeholder="Acción Requerida..." />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Contenido del Mensaje</Label>
+                      <textarea 
+                        className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 min-h-[150px]"
+                        value={newPlantilla.contenido}
+                        onChange={(e) => setNewPlantilla({...newPlantilla, contenido: e.target.value})}
+                        placeholder="Escribe el cuerpo del correo de phishing..."
+                      />
+                    </div>
+                    <div className="flex justify-end gap-3 pt-4">
+                      <Button variant="outline" onClick={() => setDialogPlantillaOpen(false)}>Cancelar</Button>
+                      <Button onClick={savePlantilla} disabled={!newPlantilla.nombre || !newPlantilla.asunto || loading}>
+                        {loading ? 'Guardando...' : 'Guardar Plantilla'}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {plantillas.map(p => (
+                <Card key={p.id} className="card-glass border-primary/10 flex flex-col h-full">
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-start">
+                      <CardTitle className="text-base truncate pr-2">{p.nombre}</CardTitle>
+                      <Badge variant={p.es_global ? "secondary" : "outline"} className={cn("text-[10px]", p.es_global ? "bg-primary/10 text-primary" : "")}>
+                        {p.es_global ? "Global" : "Propia"}
+                      </Badge>
+                    </div>
+                    <CardDescription className="text-xs truncate">Remitente: {p.remitente}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-1 pb-2">
+                    <div className="text-sm font-medium mb-1 truncate">{p.asunto}</div>
+                    <p className="text-xs text-muted-foreground line-clamp-3 mb-2">{p.contenido}</p>
+                    <Badge variant="outline" className="text-[10px] mt-2">Dificultad: {p.dificultad}</Badge>
+                  </CardContent>
+                  {!p.es_global && (
+                    <div className="p-4 pt-0 flex justify-end gap-2 mt-auto">
+                      <Button size="icon" variant="ghost" onClick={() => {
+                        setEditingPlantilla(p);
+                        setNewPlantilla(p);
+                        setDialogPlantillaOpen(true);
+                      }}>
+                        <Edit size={14} className="text-muted-foreground" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="hover:bg-risk-high/10 hover:text-risk-high" onClick={() => deletePlantilla(p.id)}>
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
+                  )}
+                  {p.es_global && (
+                    <div className="p-4 pt-0 mt-auto text-xs text-muted-foreground text-center italic">
+                      Plantilla de sistema (Solo lectura)
+                    </div>
+                  )}
+                </Card>
+              ))}
+              {plantillas.length === 0 && !loading && (
+                <div className="col-span-full text-center py-12 text-muted-foreground">
+                  No hay plantillas disponibles.
                 </div>
               )}
             </div>

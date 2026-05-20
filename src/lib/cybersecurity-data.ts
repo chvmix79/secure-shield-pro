@@ -25,6 +25,19 @@ export interface Risk {
   description: string;
   icon: string;
   affected: string[];
+  probability?: number;
+  impact?: number;
+}
+
+export interface Question {
+  id: string;
+  category: string;
+  icon: string;
+  question: string;
+  description: string;
+  probability: number;
+  impact: number;
+  options: { label: string; score: number }[];
 }
 
 export interface Action {
@@ -190,6 +203,8 @@ export const diagnosticQuestions = [
     icon: "🔑",
     question: "¿Tu empresa tiene una política de contraseñas seguras?",
     description: "Contraseñas de 8+ caracteres, combinando letras, números y símbolos.",
+    probability: 4,
+    impact: 4,
     options: [
       { label: "Sí, todos usan contraseñas fuertes y las cambian regularmente", score: 10 },
       { label: "Algunas personas, pero no es obligatorio", score: 5 },
@@ -228,6 +243,8 @@ export const diagnosticQuestions = [
     icon: "📱",
     question: "¿Usan doble factor de autenticación (2FA) en cuentas críticas?",
     description: "Verificación adicional por SMS, app o correo al iniciar sesión.",
+    probability: 4,
+    impact: 5,
     options: [
       { label: "Sí, en correo, banca y sistemas principales", score: 10 },
       { label: "Solo en algunos servicios", score: 5 },
@@ -266,6 +283,8 @@ export const diagnosticQuestions = [
     icon: "🛡️",
     question: "¿Todos los equipos de la empresa tienen antivirus activo y actualizado?",
     description: "Solución antivirus instalada y con actualizaciones automáticas.",
+    probability: 3,
+    impact: 4,
     options: [
       { label: "Sí, todos los equipos con antivirus corporativo actualizado", score: 10 },
       { label: "Algunos equipos tienen, otros no", score: 5 },
@@ -304,6 +323,8 @@ export const diagnosticQuestions = [
     icon: "💾",
     question: "¿Realizan copias de seguridad (backup) de la información crítica?",
     description: "Respaldo regular de documentos, bases de datos y sistemas.",
+    probability: 2,
+    impact: 5,
     options: [
       { label: "Sí, backups automáticos diarios en la nube y copias offline", score: 10 },
       { label: "Hacemos backups ocasionalmente, no de forma sistemática", score: 5 },
@@ -354,6 +375,8 @@ export const diagnosticQuestions = [
     icon: "📧",
     question: "¿Tu empresa usa correo corporativo con dominio propio para todos los empleados?",
     description: "Correos @tuempresa.com en lugar de Gmail/Hotmail personales.",
+    probability: 3,
+    impact: 3,
     options: [
       { label: "Sí, todos usamos correo corporativo con filtros antispam", score: 10 },
       { label: "Algunos usan corporativo, otros personales", score: 5 },
@@ -964,30 +987,167 @@ export const diagnosticQuestions = [
   },
 ];
 
-export const sectorQuestions: Record<string, typeof diagnosticQuestions> = {
+export const sectorQuestions: Record<string, Question[]> = {
+  aduana: [
+    {
+      id: "aduana1",
+      category: "Aduanas",
+      icon: "🚢",
+      question: "¿Cuentan con la certificación OEA o cumplen los estándares de seguridad de la DIAN?",
+      description: "Operador Económico Autorizado y seguridad en cadena de suministro.",
+      probability: 3,
+      impact: 5,
+      options: [
+        { label: "Sí, certificación OEA vigente", score: 10 },
+        { label: "En proceso de certificación o cumplimiento parcial", score: 5 },
+        { label: "No cumplimos con estándares OEA/DIAN", score: 0 },
+      ],
+    },
+    {
+      id: "aduana2",
+      category: "Aduanas",
+      icon: "🖥️",
+      question: "¿El acceso a VUCE y MUISCA está protegido con certificados digitales?",
+      description: "Uso de firma digital y certificados individuales para trámites.",
+      probability: 4,
+      impact: 5,
+      options: [
+        { label: "Sí, certificados individuales y redes seguras (VPN)", score: 10 },
+        { label: "Compartimos certificados o usamos redes no seguras", score: 0 },
+      ],
+    },
+    {
+      id: "aduana3",
+      category: "Aduanas",
+      icon: "📦",
+      question: "¿Evalúan la ciberseguridad de transportadores y operadores logísticos?",
+      description: "Debida diligencia a terceros en la cadena de suministro.",
+      probability: 4,
+      impact: 4,
+      options: [
+        { label: "Sí, evaluación formal periódica", score: 10 },
+        { label: "Solo pedimos documentos básicos", score: 5 },
+        { label: "No evaluamos a terceros", score: 0 },
+      ],
+    },
+    {
+      id: "basc1",
+      category: "BASC",
+      icon: "🌍",
+      question: "¿Cuentan con certificación BASC o cumplen con la Norma y Estándar V6-2022?",
+      description: "Business Alliance for Secure Commerce - Estándar de comercio seguro.",
+      probability: 2,
+      impact: 5,
+      options: [
+        { label: "Sí, certificación vigente y auditorías al día", score: 10 },
+        { label: "En implementación siguiendo el Estándar V6", score: 5 },
+        { label: "No contamos con BASC", score: 0 },
+      ],
+    },
+  ],
+  privacidad: [
+    {
+      id: "eip1",
+      category: "Privacidad (EIP)",
+      icon: "👣",
+      question: "¿Realizan tratamiento de datos sensibles o biométricos?",
+      description: "Huellas, fotos, salud o datos de menores.",
+      probability: 4,
+      impact: 5,
+      options: [
+        { label: "Sí, con autorización legal reforzada y EIP", score: 10 },
+        { label: "Tratamos datos pero no tenemos EIP formal", score: 5 },
+        { label: "No tratamos datos sensibles", score: 10 },
+      ],
+    },
+    {
+      id: "eip2",
+      category: "Privacidad (EIP)",
+      icon: "⚖️",
+      question: "¿Tienen prueba del consentimiento previo, expreso e informado?",
+      description: "Evidencia de la autorización del titular (Ley 1581).",
+      probability: 3,
+      impact: 5,
+      options: [
+        { label: "Sí, registro digital o físico de cada autorización", score: 10 },
+        { label: "Algunas autorizaciones faltan o son verbales", score: 5 },
+        { label: "No recolectamos autorizaciones formalmente", score: 0 },
+      ],
+    },
+  ],
   salud: [
     {
       id: "salud1",
       category: "Datos de Pacientes",
       icon: "🏥",
       question: "¿Los datos de pacientes están cifrados en reposo y en tránsito?",
-      description: "Cifrado de historias clínicas y información sensible.",
+      description: "Cifrado de historias clínicas y cumplimiento Ley 1581.",
+      probability: 3,
+      impact: 5,
       options: [
-        { label: "Sí, toda la información está cifrada con estándares HIPAA", score: 10 },
-        { label: "Parcialmente, algunos sistemas tienen cifrado", score: 5 },
-        { label: "No, los datos no están cifrados", score: 0 },
+        { label: "Sí, cifrado AES-256 en reposo y TLS en tránsito", score: 10 },
+        { label: "Solo en tránsito", score: 5 },
+        { label: "No hay cifrado", score: 0 },
       ],
     },
     {
       id: "salud2",
       category: "Cumplimiento",
       icon: "📋",
-      question: "¿Cumples con regulations de protección de datos de salud (HIPAA/LGPD)?",
-      description: "Cumplimiento con leyes de privacidad médica.",
+      question: "¿Cumplen con los estándares de interoperabilidad de MinSalud?",
+      description: "Seguridad en el intercambio de historias clínicas electrónicas.",
+      probability: 4,
+      impact: 5,
       options: [
-        { label: "Sí, tenemos auditorías regulares", score: 10 },
-        { label: "Estamos en proceso de cumplimiento", score: 5 },
-        { label: "No hemos evaluado el cumplimiento", score: 0 },
+        { label: "Sí, cumplimos con la Resolución 866 de 2021", score: 10 },
+        { label: "En proceso de implementación", score: 5 },
+        { label: "No conocemos la normativa", score: 0 },
+      ],
+    },
+  ],
+  financiero: [
+    {
+      id: "finan1",
+      category: "Superfinanciera",
+      icon: "🏦",
+      question: "¿Cumplen con la Circular 001 de 2018 sobre seguridad en canales digitales?",
+      description: "Requisitos de autenticación fuerte y protección de transacciones.",
+      probability: 2,
+      impact: 5,
+      options: [
+        { label: "Sí, cumplimiento total auditado", score: 10 },
+        { label: "Cumplimiento parcial en algunos canales", score: 5 },
+        { label: "No cumplimos con la circular", score: 0 },
+      ],
+    },
+    {
+      id: "finan2",
+      category: "Fraude",
+      icon: "🕵️",
+      question: "¿Tienen sistemas de detección de fraude y monitoreo de transacciones?",
+      description: "Identificación de patrones sospechosos en tiempo real.",
+      probability: 3,
+      impact: 5,
+      options: [
+        { label: "Sí, monitoreo automatizado 24/7", score: 10 },
+        { label: "Monitoreo manual o reactivo", score: 5 },
+        { label: "No monitoreamos transacciones", score: 0 },
+      ],
+    },
+  ],
+  sagrilaft: [
+    {
+      id: "sag1",
+      category: "SAGRILAFT",
+      icon: "🔍",
+      question: "¿Aplican debida diligencia de ciberseguridad para prevención de lavado de activos?",
+      description: "Verificación de beneficiarios finales y listas restrictivas.",
+      probability: 3,
+      impact: 5,
+      options: [
+        { label: "Sí, procesos automatizados integrados", score: 10 },
+        { label: "Procesos manuales periódicos", score: 5 },
+        { label: "No aplicamos debida diligencia", score: 0 },
       ],
     },
   ],
@@ -996,24 +1156,14 @@ export const sectorQuestions: Record<string, typeof diagnosticQuestions> = {
       id: "tech1",
       category: "Desarrollo Seguro",
       icon: "⚙️",
-      question: "¿Tienen proceso de revisión de seguridad en el desarrollo de software?",
-      description: "Code review y pruebas de seguridad en el ciclo de desarrollo.",
+      question: "¿Siguen los lineamientos de MinTIC para el desarrollo de software seguro?",
+      description: "Guía de seguridad en el ciclo de vida del software de MinTIC.",
+      probability: 3,
+      impact: 4,
       options: [
-        { label: "Sí, seguridad integrada en CI/CD", score: 10 },
-        { label: "Ocasionalmente hacemos revisiones", score: 5 },
-        { label: "No tenemos proceso de seguridad", score: 0 },
-      ],
-    },
-    {
-      id: "tech2",
-      category: "Infraestructura",
-      icon: "☁️",
-      question: "¿La infraestructura en la nube está configurada correctamente?",
-      description: "Políticas de IAM, VPCs, y configuraciones seguras.",
-      options: [
-        { label: "Sí, auditorías mensuales de configuración", score: 10 },
-        { label: "Hemos revisado algunas veces", score: 5 },
-        { label: "No hemos revisado la configuración", score: 0 },
+        { label: "Sí, seguridad desde el diseño (PbD)", score: 10 },
+        { label: "Revisiones esporádicas de seguridad", score: 5 },
+        { label: "No seguimos lineamientos específicos", score: 0 },
       ],
     },
   ],
@@ -1034,12 +1184,14 @@ export const sectorQuestions: Record<string, typeof diagnosticQuestions> = {
       id: "comercio2",
       category: "Datos de Clientes",
       icon: "👥",
-      question: "¿Los datos de clientes están protegidos y tienes política de privacidad?",
-      description: "Protección de información personal de clientes.",
+      question: "¿Los datos de clientes están protegidos según la Guía de Responsabilidad Demostrada de la SIC?",
+      description: "Protección de información personal según la Superintendencia de Industria y Comercio.",
+      probability: 3,
+      impact: 4,
       options: [
-        { label: "Sí, política de privacidad y protección de datos", score: 10 },
-        { label: "Parcialmente, necesitamos mejorarla", score: 5 },
-        { label: "No tenemos política de privacidad", score: 0 },
+        { label: "Sí, cumplimos con el principio de Accountability de la SIC", score: 10 },
+        { label: "Parcialmente implementado", score: 5 },
+        { label: "No conocemos la guía de la SIC", score: 0 },
       ],
     },
   ],
@@ -1072,26 +1224,16 @@ export const sectorQuestions: Record<string, typeof diagnosticQuestions> = {
   educacion: [
     {
       id: "edu1",
-      category: "Datos de Estudiantes",
+      category: "Protección de Menores",
       icon: "🎓",
-      question: "¿Los datos de estudiantes están protegidos conforme a FERPA/LGPD?",
-      description: "Privacidad de información académica.",
+      question: "¿El tratamiento de datos de menores cumple con el Interés Superior del Niño?",
+      description: "Requisitos de Ley 1581 para instituciones educativas.",
+      probability: 2,
+      impact: 5,
       options: [
-        { label: "Sí, cumplimiento total de privacidad", score: 10 },
-        { label: "Parcialmente, en proceso", score: 5 },
-        { label: "No hemos evaluado el cumplimiento", score: 0 },
-      ],
-    },
-    {
-      id: "edu2",
-      category: "Acceso de Usuarios",
-      icon: "🎫",
-      question: "¿Los estudiantes tienen acceso solo a recursos apropiados para su edad?",
-      description: "Control parental y de contenido.",
-      options: [
-        { label: "Sí, con filtros de contenido y controles parentales", score: 10 },
-        { label: "Tenemos algunos filtros básicos", score: 5 },
-        { label: "No hay controles de contenido", score: 0 },
+        { label: "Sí, con autorización explícita de tutores y fines educativos claros", score: 10 },
+        { label: "Faltan algunas autorizaciones o finalidades", score: 5 },
+        { label: "No tenemos protocolos para datos de menores", score: 0 },
       ],
     },
   ],
@@ -1114,12 +1256,30 @@ export const sectorQuestions: Record<string, typeof diagnosticQuestions> = {
       id: "trans1",
       category: "Flota",
       icon: "🚚",
-      question: "¿Los vehículos tienen sistemas de rastreo con acceso seguro?",
-      description: "Seguridad de GPS y sistemas de rastreo.",
+      question: "¿Cumplen con la Circular de SuperTransporte sobre protección de datos en GPS?",
+      description: "Seguridad y privacidad en el rastreo satelital de vehículos.",
+      probability: 4,
+      impact: 4,
       options: [
-        { label: "Sí, con autenticación y monitoreo", score: 10 },
-        { label: "Tenemos rastreo básico", score: 5 },
-        { label: "No tenemos sistemas de rastreo", score: 0 },
+        { label: "Sí, con protocolos de seguridad y acceso restringido", score: 10 },
+        { label: "Tenemos rastreo básico sin protocolos de seguridad", score: 5 },
+        { label: "No tenemos sistemas de rastreo protegidos", score: 0 },
+      ],
+    },
+  ],
+  solidario: [
+    {
+      id: "solid1",
+      category: "Supersolidaria",
+      icon: "🤝",
+      question: "¿Cumplen con la Circular Básica Jurídica sobre riesgo operativo y TI?",
+      description: "Lineamientos de seguridad de la información para cooperativas.",
+      probability: 3,
+      impact: 4,
+      options: [
+        { label: "Sí, cumplimiento total documentado", score: 10 },
+        { label: "Estamos implementando los controles", score: 5 },
+        { label: "No conocemos la normativa de Supersolidaria", score: 0 },
       ],
     },
   ],
@@ -1134,6 +1294,34 @@ export function getQuestionsBySector(sector: string | null | undefined): typeof 
 
 export function getQuestionsWithNormativas(sector?: string): typeof diagnosticQuestions {
   const normativasQuestions = [
+    {
+      id: "basc_gen",
+      category: "Comercio Seguro",
+      icon: "🚢",
+      question: "¿Realizan la gestión de riesgos enfocada en la seguridad del comercio internacional (BASC)?",
+      description: "Identificación de riesgos en la cadena de suministro internacional.",
+      probability: 3,
+      impact: 5,
+      options: [
+        { label: "Sí, con matriz BASC de gestión de riesgos", score: 10 },
+        { label: "Parcialmente para algunos procesos", score: 5 },
+        { label: "No aplicamos gestión BASC", score: 0 },
+      ],
+    },
+    {
+      id: "sagrilaft_gen",
+      category: "SAGRILAFT",
+      icon: "🕵️‍♂️",
+      question: "¿La empresa implementa procesos de debida diligencia según SAGRILAFT o SIPLAFT?",
+      description: "Prevención de Lavado de Activos y Financiación del Terrorismo.",
+      probability: 2,
+      impact: 5,
+      options: [
+        { label: "Sí, sistema de gestión completo y oficial de cumplimiento", score: 10 },
+        { label: "Tenemos controles básicos de debida diligencia", score: 5 },
+        { label: "No implementamos SAGRILAFT/SIPLAFT", score: 0 },
+      ],
+    },
     // ========== ISO 27001 ==========
     {
       id: "iso1",
@@ -1249,11 +1437,13 @@ export function getQuestionsWithNormativas(sector?: string): typeof diagnosticQu
     },
   ];
   
+  const allNormativeAndSector = [...diagnosticQuestions, ...normativasQuestions, ...sectorQuestions.privacidad];
+  
   if (sector && sectorQuestions[sector.toLowerCase()]) {
-    return [...diagnosticQuestions, ...normativasQuestions, ...sectorQuestions[sector.toLowerCase()]];
+    return [...allNormativeAndSector, ...sectorQuestions[sector.toLowerCase()]];
   }
   
-  return [...diagnosticQuestions, ...normativasQuestions];
+  return allNormativeAndSector;
 }
 
 export function calculateSecurityLevel(score: number): { level: RiskLevel; label: string; color: string; description: string } {

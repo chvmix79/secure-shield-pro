@@ -7,9 +7,11 @@ import { useEmpresa } from "@/hooks/useEmpresa";
 import type { ActionPriority, ActionStatus } from "@/lib/database.types";
 import { SecurityScoreWidget, RiskBadge } from "@/components/SecurityWidgets";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, ArrowRight, ArrowLeft, RotateCcw, Loader2, Building2, FileDown, Shield, Award, FileCheck } from "lucide-react";
+import { CheckCircle2, ArrowRight, ArrowLeft, RotateCcw, Loader2, Building2, FileDown, Shield, Award, FileCheck, FileSpreadsheet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateDiagnosticPDF } from "@/lib/pdf";
+import { generateDiagnosticXLSX } from "@/lib/export";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 export default function Diagnostico() {
   const navigate = useNavigate();
@@ -21,6 +23,7 @@ export default function Diagnostico() {
   const [selected, setSelected] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingDiagnostic, setLoadingDiagnostic] = useState(false);
+  const [departamento, setDepartamento] = useState<string>("General");
 
   // Load existing diagnostic if ID is provided
   useEffect(() => {
@@ -30,6 +33,9 @@ export default function Diagnostico() {
       diagnosticoService.getById(diagId).then((data) => {
         if (data) {
           setAnswers(data.respuestas);
+          if (data.departamento) {
+            setDepartamento(data.departamento);
+          }
           setStep("result");
         }
       }).catch(err => {
@@ -55,8 +61,9 @@ export default function Diagnostico() {
     score: scorePercent,
     nivel: level.level,
     respuestas: answers,
+    departamento,
     created_at: new Date().toISOString(),
-  } as { id: string; empresa_id: string; score: number; nivel: "bajo" | "medio" | "alto" | "crítico"; respuestas: Record<string, number>; created_at: string };
+  } as { id: string; empresa_id: string; score: number; nivel: "bajo" | "medio" | "alto" | "crítico"; respuestas: Record<string, number>; departamento: string | null; created_at: string };
 
   function handleAnswer(score: number) {
     setSelected(score);
@@ -81,6 +88,7 @@ export default function Diagnostico() {
           score: scorePercent,
           nivel: level.level,
           respuestas: newAnswers,
+          departamento,
         });
 
         // Auto-generación del Plan de Acción
@@ -235,6 +243,23 @@ export default function Diagnostico() {
                 ))}
               </div>
 
+              <div className="max-w-xs mx-auto space-y-2 text-left">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Departamento / Área a evaluar</label>
+                <Select value={departamento} onValueChange={setDepartamento}>
+                  <SelectTrigger className="w-full bg-background border-primary/10">
+                    <SelectValue placeholder="Selecciona un departamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="General">General / Toda la Empresa</SelectItem>
+                    <SelectItem value="Tecnología">Tecnología / TI</SelectItem>
+                    <SelectItem value="Recursos Humanos">Recursos Humanos</SelectItem>
+                    <SelectItem value="Finanzas">Finanzas y Contabilidad</SelectItem>
+                    <SelectItem value="Ventas">Ventas y Mercadeo</SelectItem>
+                    <SelectItem value="Operaciones">Operaciones</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <Button
                 onClick={() => setStep("quiz")}
                 size="lg"
@@ -347,7 +372,7 @@ export default function Diagnostico() {
           <div className="space-y-6">
             <div>
               <h1 className="text-2xl font-bold text-foreground">Resultados del Diagnóstico</h1>
-              <p className="text-sm text-muted-foreground">Completado · {new Date().toLocaleDateString("es-ES")}</p>
+              <p className="text-sm text-muted-foreground">Completado · {new Date().toLocaleDateString("es-ES")} · Área/Depto: {departamento || "General"}</p>
             </div>
 
             {/* Score card */}
@@ -410,14 +435,24 @@ export default function Diagnostico() {
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-3">
               {empresa && (
-                <Button
-                  onClick={() => generateDiagnosticPDF(diagnosticoGuardado, empresa, [])}
-                  variant="outline"
-                  className="flex-1 border-border text-foreground gap-2"
-                >
-                  <FileDown size={16} />
-                  Exportar PDF
-                </Button>
+                <>
+                  <Button
+                    onClick={() => generateDiagnosticPDF(diagnosticoGuardado, empresa, [])}
+                    variant="outline"
+                    className="flex-1 border-border text-foreground gap-2"
+                  >
+                    <FileDown size={16} />
+                    Exportar PDF
+                  </Button>
+                  <Button
+                    onClick={() => generateDiagnosticXLSX(diagnosticoGuardado, empresa, [])}
+                    variant="outline"
+                    className="flex-1 border-border text-foreground gap-2"
+                  >
+                    <FileSpreadsheet size={16} />
+                    Exportar Excel
+                  </Button>
+                </>
               )}
               <Button
                 onClick={() => navigate("/riesgos")}

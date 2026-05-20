@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS diagnosticos (
   score INTEGER NOT NULL,
   nivel VARCHAR(20),
   respuestas JSONB,
+  departamento VARCHAR(100),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

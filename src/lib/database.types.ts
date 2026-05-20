@@ -30,6 +30,7 @@ export interface Diagnostico {
   score: number;
   nivel: RiskLevel | null;
   respuestas: Record<string, number> | null;
+  departamento: string | null;
   created_at: string;
 }
 
@@ -126,11 +127,23 @@ export interface CampañaPhishing {
   id: string;
   empresa_id: string;
   nombre: string;
-  estado: 'programada' | 'en_curso' | 'finalizada';
+  estado: 'programada' | 'en_curso' | 'finalizada' | 'pendiente' | 'en_progreso' | 'completada';
   total_enviados: number;
   total_clicks: number;
   total_datos_ingresados: number;
   created_at: string;
+}
+
+export interface PlantillaPhishing {
+  id: string;
+  empresa_id: string;
+  nombre: string;
+  remitente: string;
+  asunto: string;
+  cuerpo: string;
+  nivel_dificultad: 'fácil' | 'medio' | 'difícil';
+  created_at: string;
+  updated_at: string;
 }
 
 export type Tables = {
@@ -145,4 +158,5 @@ export type Tables = {
   vulnerabilidades: Vulnerabilidad;
   score_history: ScoreHistory;
   campanas_phishing: CampañaPhishing;
+  plantillas_phishing: PlantillaPhishing;
 };

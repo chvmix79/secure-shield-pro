@@ -525,3 +525,44 @@ export const microsoft365Service = {
     };
   }
 };
+
+export const plantillasPhishingService = {
+  async getByEmpresa(empresaId: string) {
+    const { data, error } = await supabase
+      .from('plantillas_phishing')
+      .select('*')
+      .eq('empresa_id', empresaId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async create(data: Omit<import('./database.types').PlantillaPhishing, 'id' | 'created_at' | 'updated_at'>) {
+    const { data: plantilla, error } = await supabase
+      .from('plantillas_phishing')
+      .insert(data)
+      .select()
+      .single();
+    if (error) throw error;
+    return plantilla;
+  },
+
+  async update(id: string, data: Partial<import('./database.types').PlantillaPhishing>) {
+    const { data: plantilla, error } = await supabase
+      .from('plantillas_phishing')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return plantilla;
+  },
+
+  async delete(id: string) {
+    const { error } = await supabase
+      .from('plantillas_phishing')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  }
+};

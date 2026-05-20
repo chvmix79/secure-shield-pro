@@ -75,7 +75,11 @@ describe('suscripcionService', () => {
     });
 
     it('debe marcar como bloqueada si cuenta_bloqueada es true', async () => {
-      const bloqueadaData = { ...mockEmpresaData, cuenta_bloqueada: true };
+      const bloqueadaData = { 
+        ...mockEmpresaData, 
+        cuenta_bloqueada: true,
+        fecha_fin: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // hace 5 días
+      };
       vi.mocked(supabase.from).mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
@@ -140,7 +144,11 @@ describe('suscripcionService', () => {
 
   describe('estaBloqueada', () => {
     it('debe retornar true si la cuenta está bloqueada', async () => {
-      const bloqueadaData = { ...mockEmpresaData, cuenta_bloqueada: true };
+      const bloqueadaData = { 
+        ...mockEmpresaData, 
+        cuenta_bloqueada: true,
+        fecha_fin: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // hace 5 días
+      };
       vi.mocked(supabase.from).mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({

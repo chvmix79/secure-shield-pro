@@ -29,6 +29,7 @@ import { ChatCiberseguridad, ChatAuditor } from "./pages/ChatExpert";
 import DocumentosCumplimiento from "./pages/DocumentosCumplimiento";
 import Planes from "./pages/Planes";
 import CuentaBloqueada from "./pages/CuentaBloqueada";
+import Integraciones from "./pages/Integraciones";
 import SobreCHV from "./pages/SobreCHV";
 
 // QueryClient con configuración robusta anti-cascón:
@@ -99,6 +100,7 @@ const App = () => (
             <Route path="/documentos" element={<PrivateRoute><ModuloBoundary name="Cumplimiento"><DocumentosCumplimiento /></ModuloBoundary></PrivateRoute>} />
             <Route path="/planes" element={<PrivateRoute><ModuloBoundary name="Planes"><Planes /></ModuloBoundary></PrivateRoute>} />
             <Route path="/sobre-chv" element={<PrivateRoute><ModuloBoundary name="Sobre CHV"><SobreCHV /></ModuloBoundary></PrivateRoute>} />
+            <Route path="/integraciones" element={<PrivateRoute><ModuloBoundary name="Integraciones"><Integraciones /></ModuloBoundary></PrivateRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

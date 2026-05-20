@@ -16,18 +16,7 @@ import { supabase } from "@/lib/supabase";
 import { generateSecurityReport } from "@/lib/reportService";
 import { scoreHistoryService, vulnerabilidadService, documentoService, microsoft365Service, phishingService } from "@/lib/services";
 import { cn } from "@/lib/utils";
-
-interface DocumentStats {
-  total: number;
-  actualizados: number;
-  pendiente: number;
-  faltantes: number;
-}
-
-interface TrainingStats {
-  total: number;
-  completados: number;
-}
+import { useDashboardData } from "@/hooks/useDashboardData";
 
 import { DocumentoCumplimiento, Vulnerabilidad, ScoreHistory } from "@/lib/database.types";
 import { toast } from "sonner";
@@ -36,71 +25,19 @@ import { Lock, History, Calendar } from "lucide-react";
 
 export default function Dashboard() {
   const { empresa, diagnostico, acciones, alertas, loading } = useEmpresa();
-  const [diagnosticos, setDiagnosticos] = useState<{ score: number }[]>([]);
-  const [docStats, setDocStats] = useState<DocumentStats>({ total: 15, actualizados: 3, pendiente: 5, faltantes: 7 });
-  const [trainingStats, setTrainingStats] = useState<TrainingStats>({ total: 6, completados: 0 });
-  const [vulnerabilidades, setVulnerabilidades] = useState<Vulnerabilidad[]>([]);
-  const [scoreHistory, setScoreHistory] = useState<ScoreHistory[]>([]);
-  const [m365Audit, setM365Audit] = useState<any>(null);
-  const [phishingStats, setPhishingStats] = useState<any[]>([]);
-  const [plan, setPlan] = useState<string>('free');
-  const [estadoSuscripcion, setEstadoSuscripcion] = useState<EstadoSuscripcion | null>(null);
+  const {
+    diagnosticos,
+    docStats,
+    trainingStats,
+    vulnerabilidades,
+    scoreHistory,
+    m365Audit,
+    phishingStats,
+    plan,
+    estadoSuscripcion
+  } = useDashboardData(empresa?.id);
 
-  useEffect(() => {
-    async function loadDiagnosticos() {
-      if (!empresa?.id) return;
-      const data = await diagnosticoService.getByEmpresa(empresa.id);
-      setDiagnosticos(data || []);
-      
-      // Get current plan and state
-      const e = await suscripcionService.getEstadoSuscripcion(empresa.id);
-      setEstadoSuscripcion(e);
-      setPlan(e.plan);
-    }
-    loadDiagnosticos();
-  }, [empresa?.id]);
 
-  useEffect(() => {
-    async function loadDynamicStats() {
-      if (!empresa?.id) return;
-      
-      try {
-        const [docsResult, docs, history, vulns, m365, phishing] = await Promise.all([
-          supabase.from('progreso_capacitacion').select('modulo_id, completado, usuarios!inner(empresa_id)').eq('usuarios.empresa_id', empresa.id).catch(() => ({ data: [] })),
-          documentoService.getByEmpresa(empresa.id).catch(() => []),
-          scoreHistoryService.getByEmpresa(empresa.id).catch(() => []),
-          vulnerabilidadService.getByEmpresa(empresa.id).catch(() => []),
-          microsoft365Service.getAuditStatus(empresa.id).catch(() => null),
-          phishingService.getCampañas(empresa.id).catch(() => [])
-        ]);
-        
-        if (docsResult.data) {
-          setTrainingStats({
-            total: 6,
-            completados: docsResult.data.filter((d: { completado: boolean }) => d.completado).length
-          });
-        }
-        
-        if (docs) {
-          setDocStats({
-            total: docs.length || 15,
-            actualizados: docs.filter(d => d.estado === 'actualizado').length,
-            pendiente: docs.filter(d => d.estado === 'pendiente').length,
-            faltantes: docs.filter(d => d.estado === 'faltante' || d.estado === 'obsoleto').length
-          });
-        }
-
-        setScoreHistory(history || []);
-        setVulnerabilidades(vulns || []);
-        setM365Audit(m365);
-        setPhishingStats(phishing || []);
-      } catch (error) {
-        console.error("Error loading dynamic stats:", error);
-      }
-    }
-    loadDynamicStats();
-  }, [empresa?.id]);
-  
   const pendingActions = acciones.filter((a) => a.estado === "pendiente" || a.estado === "vencida");
   const completedActions = acciones.filter((a) => a.estado === "completada");
   const inProgressActions = acciones.filter((a) => a.estado === "en_progreso");

@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 export default function Historial() {
   const { empresa, diagnostico: diagnosticoActual } = useEmpresa();
-  const [diagnosticos, setDiagnosticos] = useState<{ id: string; score: number; created_at: string; respuestas?: Record<string, number> }[]>([]);
+  const [diagnosticos, setDiagnosticos] = useState<{ id: string; score: number; created_at: string; respuestas?: Record<string, number>; departamento?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -123,13 +123,18 @@ export default function Historial() {
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-1">
                           <Calendar size={14} />
                           {new Date(d.created_at).toLocaleDateString('es-ES', {
                             year: 'numeric',
                             month: 'long',
                             day: 'numeric'
                           })}
+                          {d.departamento && (
+                            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">
+                              {d.departamento}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

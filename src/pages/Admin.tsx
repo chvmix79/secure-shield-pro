@@ -5,19 +5,20 @@ import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Building2, Users, Shield, TrendingUp, ArrowRight, Search, Filter, CheckCircle2, AlertTriangle, Clock, Eye, Pencil, Trash2, X, Plus, ExternalLink, MessageSquare, DollarSign, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { suscripcionService, PLANES } from "@/lib/suscripcion";
-import { pagoService, SolicitudPago } from "@/lib/pago";
+import { PLANES } from "@/lib/suscripcion";
+import { pagoService } from "@/lib/pago";
 import { toast } from "sonner";
 import { esAdminGlobal } from "@/lib/admin-utils";
 import { useEmpresa } from "@/hooks/useEmpresa";
+import { PlanDialog } from "@/components/admin/PlanDialog";
+import { EmpresaEditDialog } from "@/components/admin/EmpresaEditDialog";
+import { ToolDialog } from "@/components/admin/ToolDialog";
+import { useAdminData, EmpresaStats, Tool, Lead } from "@/hooks/useAdminData";
 
 interface EmpresaStats {
   id: string;
@@ -68,241 +69,47 @@ const sectores: Record<string, string> = {
 export default function Admin() {
   const navigate = useNavigate();
   const { refresh } = useEmpresa();
-  const [empresas, setEmpresas] = useState<EmpresaStats[]>([]);
-  const [tools, setTools] = useState<Tool[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [solicitudes, setSolicitudes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterSector, setFilterSector] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
   
   // Dialog States
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDialogOpen] = useState(false);
   const [toolDialogOpen, setToolDialogOpen] = useState(false);
-  
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
   
   const [selectedEmpresa, setSelectedEmpresa] = useState<EmpresaStats | null>(null);
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
   const [selectedEmpresaForPlan, setSelectedEmpresaForPlan] = useState<EmpresaStats | null>(null);
-  
-  const [editForm, setEditForm] = useState({ nombre: "", sector: "", email: "" });
-  const [planForm, setPlanForm] = useState({ plan: "free", duration: "30" });
-  const [toolForm, setToolForm] = useState<Partial<Tool>>({
-    nombre: "",
-    descripcion: "",
-    categoria: "General",
-    precio: "",
-    sitio_web: "",
-    tier: "free",
-    logo: "🛠️",
-    affiliate_link: "",
-    commission_percent: 0
-  });
 
   const { isAdmin: contextIsAdmin } = useEmpresa();
   const isAdmin = contextIsAdmin || esAdminGlobal(localStorage.getItem("user_email"));
-
-  useEffect(() => {
-    if (isAdmin) {
-      loadAll();
-    }
-  }, []);
-
-  const loadAll = async () => {
-    try {
-      setLoading(true);
-      await Promise.all([
-        loadEmpresas().catch(e => console.error("Error loading empresas:", e)), 
-        loadTools().catch(e => console.error("Error loading tools:", e)), 
-        loadLeads().catch(e => console.error("Error loading leads:", e)), 
-        loadSolicitudes().catch(e => console.error("Error loading requests:", e))
-      ]);
-    } catch (err) {
-      console.error("Error in loadAll:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  async function loadEmpresas() {
-    const { data: statsData } = await supabase.from("v_empresas_stats").select("*");
-    if (statsData) {
-      setEmpresas(statsData.map(stat => ({
-        id: stat.id,
-        nombre: stat.nombre,
-        sector: stat.sector,
-        email: stat.email,
-        diagnosticos_count: stat.diagnosticos_count || 0,
-        ultimo_diagnostico: stat.ultimo_diagnostico,
-        score_promedio: Math.round(stat.score_promedio || 0),
-        acciones_pendientes: stat.acciones_pendientes || 0,
-        acciones_completadas: stat.acciones_completadas || 0,
-        plan: stat.plan || 'free'
-      })));
-    }
-  }
-
-  async function loadTools() {
-    try {
-      const { data, error } = await supabase.from("herramientas").select("*").order("nombre");
-      if (error) {
-        console.error("Error loading tools:", error);
-        return;
-      }
-      if (data) setTools(data);
-    } catch (e) {
-      console.error("Exception loading tools:", e);
-    }
-  }
-
-  async function loadLeads() {
-    try {
-      const { data, error } = await supabase
-        .from("leads_marketplace")
-        .select("*, empresa:empresas(nombre)")
-        .order("created_at", { ascending: false });
-      if (error) {
-        console.error("Error loading leads:", error);
-        return;
-      }
-      if (data) setLeads(data as unknown as Lead[]);
-    } catch (e) {
-      console.error("Exception loading leads:", e);
-    }
-  }
-
-  async function loadSolicitudes() {
-    try {
-      const data = await pagoService.getSolicitudesPendientes();
-      if (data) setSolicitudes(data);
-    } catch (error) {
-      console.error("Error cargando solicitudes:", error);
-    }
-  }
-
-  const handleAprobarPago = async (solicitud: any) => {
-    if (!confirm(`¿Aprobar el pago de ${solicitud.monto.toLocaleString()} para el plan ${PLANES[solicitud.plan as keyof typeof PLANES]?.nombre}?`)) return;
-    
-    try {
-      await pagoService.aprobarSolicitud(solicitud.id, solicitud.empresa_id, solicitud.plan, solicitud.ciclo || 'mensual');
-      toast.success("Pago aprobado y plan activado");
-      loadSolicitudes();
-      loadEmpresas();
-    } catch (error) {
-      toast.error("Error al aprobar el pago");
-    }
-  };
-
-  const handleRechazarPago = async (solicitud: any) => {
-    const motivo = prompt("Motivo del rechazo:");
-    if (!motivo) return;
-    
-    try {
-      await pagoService.rechazarSolicitud(solicitud.id, motivo);
-      toast.success("Pago rechazado");
-      loadSolicitudes();
-    } catch (error) {
-      toast.error("Error al rechazar el pago");
-    }
-  };
-
-  const handleSaveTool = async () => {
-    try {
-      if (selectedTool) {
-        const { error } = await supabase.from("herramientas").update(toolForm).eq("id", selectedTool.id);
-        if (error) throw error;
-        toast.success("Herramienta actualizada");
-      } else {
-        const { error } = await supabase.from("herramientas").insert(toolForm);
-        if (error) throw error;
-        toast.success("Herramienta creada");
-      }
-      setToolDialogOpen(false);
-      loadTools();
-    } catch (error) {
-      toast.error("Error al guardar herramienta");
-    }
-  };
-
-  const handleDeleteTool = async (id: string) => {
-    if (!confirm("¿Eliminar esta herramienta?")) return;
-    const { error } = await supabase.from("herramientas").delete().eq("id", id);
-    if (!error) {
-      toast.success("Eliminada");
-      loadTools();
-    }
-  };
-
-  const updateLeadStatus = async (id: string, nuevoEstado: string) => {
-    const { error } = await supabase.from("leads_marketplace").update({ estado: nuevoEstado }).eq("id", id);
-    if (!error) {
-      toast.success("Estado actualizado");
-      loadLeads();
-    }
-  };
-
-  const handleSaveEmpresa = async () => {
-    try {
-      if (selectedEmpresa) {
-        const { error } = await supabase
-          .from("empresas")
-          .update(editForm)
-          .eq("id", selectedEmpresa.id);
-        if (error) throw error;
-        toast.success("Empresa actualizada correctamente");
-        setEditDialogOpen(false);
-        loadEmpresas();
-        refresh(); // Refrescamos el contexto por si es la empresa actual
-      }
-    } catch (error) {
-      toast.error("Error al actualizar la empresa");
-    }
-  };
-
-  const handleDeleteEmpresa = async (id: string, nombre: string) => {
-    if (!isAdmin) return;
-    if (!confirm(`¿Estás SEGURO de eliminar por completo la empresa "${nombre}" y todos sus datos? Esta acción crítica no se puede deshacer.`)) return;
-    
-    try {
-      const { error } = await supabase.from('empresas').delete().eq('id', id);
-      if (error) throw error;
-      toast.success('Empresa eliminada correctamente');
-      loadEmpresas();
-    } catch (error: any) {
-      console.error(error);
-      toast.error(error.message || "Error al eliminar la empresa. Asegúrate de eliminar primero todas las referencias (usuarios, diagnósticos) o configurar el borrado en cascada en la base de datos.");
-    }
-  };
-
-  const handleUpdatePlan = async () => {
-    if (!selectedEmpresaForPlan) return;
-    const hoy = new Date();
-    const diasContratados = parseInt(planForm.duration);
-    const fechaFinEfectiva = new Date();
-    // El sistema ahora suma 2 días de gracia automáticamente a la fecha de fin
-    fechaFinEfectiva.setDate(fechaFinEfectiva.getDate() + diasContratados + 2);
-
-    const fmt = (d: Date) => d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
-
-    try {
-      await suscripcionService.upgradePlan(
-        selectedEmpresaForPlan.id,
-        planForm.plan as any,
-        dias
-      );
-      toast.success(
-        `✅ Plan ${PLANES[planForm.plan as keyof typeof PLANES]?.nombre} activado para ${selectedEmpresaForPlan.nombre}. Acceso total hasta el ${fmt(fechaFinEfectiva)} (Incluye ${diasContratados} días contratados + 2 de gracia).`,
-        { duration: 6000 }
-      );
-      refresh(); // Sincroniza el contexto global inmediatamente
-      setPlanDialogOpen(false);
-      loadEmpresas();
-    } catch (error) {
-      toast.error("Error al actualizar el plan");
-    }
-  };
+  
+  const {
+    empresas,
+    tools,
+    leads,
+    solicitudes,
+    loading,
+    setLeads,
+    loadEmpresas,
+    loadTools,
+    loadLeads,
+    loadSolicitudes,
+    handleAprobarPago,
+    handleRechazarPago,
+    handleDeleteTool,
+    updateLeadStatus,
+    handleDeleteEmpresa
+  } = useAdminData(isAdmin);
 
   const handleIrDashboard = (empresaId: string) => {
     localStorage.setItem("empresa_id", empresaId);
@@ -310,11 +117,24 @@ export default function Admin() {
   };
 
   const filteredEmpresas = empresas.filter((emp) => {
-    const matchSearch = emp.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      emp.email.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = emp.nombre.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      emp.email.toLowerCase().includes(debouncedSearch.toLowerCase());
     const matchSector = !filterSector || filterSector === "all" || emp.sector === filterSector;
     return matchSearch && matchSector;
   });
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, filterSector]);
+
+  const totalPages = Math.ceil(filteredEmpresas.length / itemsPerPage);
+  const paginatedEmpresas = filteredEmpresas.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   if (!isAdmin) {
     return (
@@ -387,7 +207,7 @@ export default function Admin() {
             </div>
 
             <div className="space-y-3">
-              {filteredEmpresas.map((emp) => (
+              {paginatedEmpresas.map((emp) => (
                 <Card key={emp.id} className="card-glass hover:border-primary/30 transition-all overflow-hidden border-l-4 border-l-primary">
                   <CardContent className="p-5">
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -420,7 +240,6 @@ export default function Admin() {
                             size="sm" 
                             onClick={() => {
                               setSelectedEmpresaForPlan(emp);
-                              setPlanForm({ plan: emp.plan || 'free', duration: "30" });
                               setPlanDialogOpen(true);
                             }} 
                             className="h-8 border-primary/30 text-primary hover:bg-primary/5"
@@ -435,7 +254,6 @@ export default function Admin() {
                                 className="h-8 w-8 text-primary border-primary/30"
                                 onClick={() => {
                                   setSelectedEmpresa(emp);
-                                  setEditForm({ nombre: emp.nombre, sector: emp.sector, email: emp.email });
                                   setEditDialogOpen(true);
                                 }}
                               >
@@ -453,6 +271,32 @@ export default function Admin() {
                 </Card>
               ))}
             </div>
+
+            {totalPages > 1 && (
+              <div className="flex justify-between items-center mt-6 pt-4 border-t border-border">
+                <span className="text-xs text-muted-foreground">
+                  Mostrando {paginatedEmpresas.length} de {filteredEmpresas.length} empresas (Página {currentPage} de {totalPages})
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  >
+                    Siguiente
+                  </Button>
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="marketplace" className="space-y-6">
@@ -460,7 +304,6 @@ export default function Admin() {
               <h2 className="text-xl font-bold">Gestión de Herramientas</h2>
               <Button onClick={() => {
                 setSelectedTool(null);
-                setToolForm({ tier: 'free', categoria: 'General', logo: '🛠️' });
                 setToolDialogOpen(true);
               }}>
                 <Plus size={16} className="mr-2" /> Nueva Herramienta
@@ -476,7 +319,6 @@ export default function Admin() {
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => {
                           setSelectedTool(tool);
-                          setToolForm(tool);
                           setToolDialogOpen(true);
                         }}>
                           <Pencil size={14} />
@@ -699,167 +541,26 @@ export default function Admin() {
           </TabsContent>
         </Tabs>
 
-        {/* Plan Management Dialog */}
-        <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Gestionar Plan para {selectedEmpresaForPlan?.nombre}</DialogTitle>
-              <DialogDescription>
-                Cambia el plan de suscripción y la duración del acceso.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Seleccionar Plan</Label>
-                <Select value={planForm.plan} onValueChange={v => setPlanForm({...planForm, plan: v})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un plan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="free">Prueba Gratis (Limitado)</SelectItem>
-                    <SelectItem value="basic">Básico</SelectItem>
-                    <SelectItem value="pro">Profesional (Full)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Duración (días)</Label>
-                <Select value={planForm.duration} onValueChange={v => setPlanForm({...planForm, duration: v})}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="7">7 días (Express)</SelectItem>
-                    <SelectItem value="30">30 días (Mes)</SelectItem>
-                    <SelectItem value="90">90 días (Trimestre)</SelectItem>
-                    <SelectItem value="365">365 días (Año)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {/* Vista previa de fechas */}
-              {planForm.plan !== 'free' && (() => {
-                const hoy = new Date();
-                const diasContratados = parseInt(planForm.duration);
-                const fin = new Date();
-                fin.setDate(fin.getDate() + diasContratados + 2);
-                const fmt = (d: Date) => d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
-                return (
-                  <div className="bg-muted/60 rounded-lg p-3 space-y-1.5 border border-border">
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Vista previa de acceso</p>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Inicio:</span>
-                      <span className="font-bold text-foreground">{fmt(hoy)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs border-t border-border pt-1.5 mt-1">
-                      <span className="text-muted-foreground font-bold">Bloqueo Definitivo:</span>
-                      <span className="font-bold text-danger">{fmt(fin)}</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-2 italic">
-                      * El acceso incluye {diasContratados} días de suscripción + 2 días de gracia.
-                    </p>
-                  </div>
-                );
-              })()}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setPlanDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={handleUpdatePlan} className="bg-success hover:bg-success/90">
-                <CheckCircle2 size={14} className="mr-2" /> Actualizar Plan
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <PlanDialog 
+          open={planDialogOpen} 
+          onOpenChange={setPlanDialogOpen} 
+          empresa={selectedEmpresaForPlan} 
+          onSuccess={loadEmpresas} 
+        />
 
-        {/* Empresa Edit Dialog */}
-        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Editar Empresa: {selectedEmpresa?.nombre}</DialogTitle>
-              <DialogDescription>
-                Actualiza la información básica de la organización.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Nombre de la Empresa</Label>
-                <Input value={editForm.nombre} onChange={e => setEditForm({...editForm, nombre: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label>Sector</Label>
-                <Select value={editForm.sector} onValueChange={v => setEditForm({...editForm, sector: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(sectores).map(([val, label]) => (
-                      <SelectItem key={val} value={val}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Email de Contacto</Label>
-                <Input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={handleSaveEmpresa}>Guardar Cambios</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <EmpresaEditDialog 
+          open={editDialogOpen} 
+          onOpenChange={setEditDialogOpen} 
+          empresa={selectedEmpresa} 
+          onSuccess={loadEmpresas} 
+        />
 
-        {/* Tool CRUD Dialog */}
-        <Dialog open={toolDialogOpen} onOpenChange={setToolDialogOpen}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
-              <DialogTitle>{selectedTool ? "Editar Herramienta" : "Nueva Herramienta"}</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 py-4">
-              <div className="space-y-2">
-                <Label>Nombre</Label>
-                <Input value={toolForm.nombre} onChange={e => setToolForm({...toolForm, nombre: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label>Categoría</Label>
-                <Input value={toolForm.categoria} onChange={e => setToolForm({...toolForm, categoria: e.target.value})} />
-              </div>
-              <div className="col-span-2 space-y-2">
-                <Label>Descripción</Label>
-                <Textarea value={toolForm.descripcion} onChange={e => setToolForm({...toolForm, descripcion: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label>Precio (Texto)</Label>
-                <Input value={toolForm.precio} onChange={e => setToolForm({...toolForm, precio: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label>Tier</Label>
-                <Select value={toolForm.tier} onValueChange={v => setToolForm({...toolForm, tier: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="free">Gratis</SelectItem>
-                    <SelectItem value="freemium">Freemium</SelectItem>
-                    <SelectItem value="paid">Premium</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="col-span-2 space-y-2">
-                <Label>Enlace de Afiliado (Importante)</Label>
-                <Input placeholder="https://..." value={toolForm.affiliate_link || ''} onChange={e => setToolForm({...toolForm, affiliate_link: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label>% Comisión Esperada</Label>
-                <Input type="number" value={toolForm.commission_percent || 0} onChange={e => setToolForm({...toolForm, commission_percent: parseFloat(e.target.value)})} />
-              </div>
-              <div className="space-y-2">
-                <Label>Logo / Emoji</Label>
-                <Input value={toolForm.logo || ''} onChange={e => setToolForm({...toolForm, logo: e.target.value})} />
-              </div>
-            </div>
-            <DialogFooter className="flex justify-end gap-2 px-0">
-              <Button variant="outline" onClick={() => setToolDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={handleSaveTool}>Guardar Cambios</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ToolDialog 
+          open={toolDialogOpen} 
+          onOpenChange={setToolDialogOpen} 
+          tool={selectedTool} 
+          onSuccess={loadTools} 
+        />
       </div>
     </AppLayout>
   );

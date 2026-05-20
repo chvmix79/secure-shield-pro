@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Filter, AlertTriangle, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useMemo } from "react";
+import { RiskHeatmap } from "@/components/RiskHeatmap";
 
 const levelOrder = { crítico: 0, alto: 1, medio: 2, bajo: 3 };
 
@@ -114,6 +115,8 @@ export default function Riesgos() {
             icon: q?.icon || "⚠️",
             affected: q?.category ? [q.category] : ["General"],
             score: score as number,
+            probability: q?.probability || (score as number < 3 ? 4 : 2),
+            impact: q?.impact || (score as number < 3 ? 5 : 3),
           };
         })
     : [];
@@ -189,6 +192,17 @@ export default function Riesgos() {
             </button>
           ))}
         </div>
+
+        {/* Dynamic Risk Matrix (Heatmap) */}
+        <RiskHeatmap 
+          risks={risks.map(r => ({
+            id: r.id,
+            name: r.name,
+            probability: r.probability,
+            impact: r.impact,
+            level: r.level as any
+          }))} 
+        />
 
         {/* Filter bar */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1">

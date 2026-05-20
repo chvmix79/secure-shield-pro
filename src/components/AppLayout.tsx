@@ -30,6 +30,7 @@ import {
   Lock,
   Info,
   HelpCircle,
+  Webhook,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -146,6 +147,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       { to: "/marketplace", icon: Shield, label: "Marketplace", badge: null, modulo: 'diagnostico' as Modulo, requerido: null },
       { to: "/microsoft365", icon: Server, label: "Microsoft 365", badge: null, modulo: 'microsoft365' as Modulo, requerido: 'pro' },
       { to: "/vulnerabilidades", icon: Bug, label: "Vulnerabilidades", badge: null, modulo: 'vulnerabilidades' as Modulo, requerido: 'pro' },
+      { to: "/integraciones", icon: Webhook, label: "Integraciones", badge: null, modulo: 'diagnostico' as Modulo, requerido: 'basic' },
       { to: "/planes", icon: CreditCard, label: "Planes", badge: null, modulo: 'diagnostico' as Modulo, requerido: null, ocultoAdmin: true },
       { to: "/sobre-chv", icon: Info, label: "Sobre CHV", badge: null, modulo: 'diagnostico' as Modulo, requerido: null },
       { to: "/usuarios", icon: Users, label: "Usuarios", badge: null, modulo: 'acciones' as Modulo, requerido: 'basic' },

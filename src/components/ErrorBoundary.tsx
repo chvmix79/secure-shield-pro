@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
 import { ErrorFallback } from "./ErrorFallback";
+import { logger } from "@/lib/logger";
 
 interface Props {
   children: ReactNode;
@@ -28,7 +29,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const module = this.props.moduleName || 'desconocido';
-    console.error(`[ErrorBoundary][${module}] Error no capturado:`, error, errorInfo);
+    logger.critical(`Error no capturado en ErrorBoundary [${module}]`, error, { module });
   }
 
   private handleReset = () => {
