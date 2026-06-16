@@ -31,6 +31,7 @@ import Planes from "./pages/Planes";
 import CuentaBloqueada from "./pages/CuentaBloqueada";
 import Integraciones from "./pages/Integraciones";
 import SobreCHV from "./pages/SobreCHV";
+import Backup from "./pages/Backup";
 
 // QueryClient con configuración robusta anti-cascón:
 // - retry: 1 (solo 1 reintento en caso de fallo, no infinito)
@@ -101,6 +102,7 @@ const App = () => (
             <Route path="/planes" element={<PrivateRoute><ModuloBoundary name="Planes"><Planes /></ModuloBoundary></PrivateRoute>} />
             <Route path="/sobre-chv" element={<PrivateRoute><ModuloBoundary name="Sobre CHV"><SobreCHV /></ModuloBoundary></PrivateRoute>} />
             <Route path="/integraciones" element={<PrivateRoute><ModuloBoundary name="Integraciones"><Integraciones /></ModuloBoundary></PrivateRoute>} />
+            <Route path="/backup" element={<PrivateRoute><ModuloBoundary name="Backup"><Backup /></ModuloBoundary></PrivateRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -5,15 +5,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') || '';
-const CLAUDE_MODEL = Deno.env.get('CLAUDE_MODEL') || 'claude-3-5-haiku-20241022';
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || '';
+const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash';
 
 interface Message {
   role: "user" | "assistant";
   content: string;
 }
 
-const SYSTEM_PROMPTS = {
+const SYSTEM_PROMPTS: Record<string, string> = {
   ciberseguridad: `Eres un experto en ciberseguridad para PYMES (Pequeñas y Medianas Empresas) en Colombia. Tu nombre es "CHV Experto en Ciberseguridad".
 
 Tu rol es ayudar a los usuarios a entender y mejorar su postura de seguridad empresarial. Debes:
@@ -53,9 +53,9 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  if (!ANTHROPIC_API_KEY) {
+  if (!GEMINI_API_KEY) {
     return new Response(
-      JSON.stringify({ error: 'AI service not configured. Please contact support.' }),
+      JSON.stringify({ error: 'AI service not configured. Please set GEMINI_API_KEY.' }),
       { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -78,30 +78,32 @@ serve(async (req) => {
     }
 
     const systemPrompt = SYSTEM_PROMPTS[mode];
-    const conversationMessages = messages.slice(-10).map((m: Message) => ({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: m.content
+    
+    // Map messages to Gemini format
+    const contents = messages.slice(-10).map((m: Message) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
     }));
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: CLAUDE_MODEL,
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: conversationMessages,
+        systemInstruction: {
+          parts: [{ text: systemPrompt }]
+        },
+        contents: contents,
+        generationConfig: {
+          maxOutputTokens: 1024,
+        }
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Anthropic API error:', response.status, errorText);
+      console.error('Gemini API error:', response.status, errorText);
 
       if (response.status === 429) {
         return new Response(
@@ -111,22 +113,22 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ error: 'Error al procesar tu solicitud. Por favor intenta de nuevo.' }),
+        JSON.stringify({ error: 'Error al procesar tu solicitud con Gemini. Por favor intenta de nuevo.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const data = await response.json();
 
-    if (!data.content || !data.content[0] || data.content[0].type !== 'text') {
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts[0]) {
       return new Response(
-        JSON.stringify({ error: 'Respuesta inválida del servicio de IA.' }),
+        JSON.stringify({ error: 'Respuesta inválida del servicio de IA (Gemini).' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     return new Response(
-      JSON.stringify({ content: data.content[0].text }),
+      JSON.stringify({ content: data.candidates[0].content.parts[0].text }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
